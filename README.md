@@ -32,8 +32,7 @@
 
 ## 개발
 빌드 과정 없는 순수 HTML/JS입니다. 로컬 실행: `python3 -m http.server` 후 `http://localhost:8000`.
-`main`에 push하면 `.github/workflows/pages.yml`이 GitHub Pages로 자동 배포합니다.
-(저장소 Settings → Pages → Source를 **GitHub Actions**로 설정)
+배포: `gh-pages` 브랜치가 GitHub Pages로 서비스됩니다. `git push origin main:gh-pages`
 
 ## 새 버전 배포 방법
 버전을 올릴 때는 아래 세 곳의 버전 숫자를 똑같이 바꾼 뒤 push 합니다.
