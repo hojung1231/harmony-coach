@@ -5,6 +5,7 @@ import {
 } from './music.js';
 import { MicPitch, Voice } from './pitch.js';
 import { drawGraph, rangeFor, COLORS } from './graph.js';
+import { APP_VERSION, checkUpdate, applyUpdate } from './update.js';
 
 const $ = (s) => document.querySelector(s);
 const audio = $('#audio');
@@ -568,6 +569,29 @@ $('#micTest').onclick = async () => {
     tick();
   } catch (err) { toast('마이크 오류: ' + err.message); }
 };
+
+/* ---------- 업데이트 ---------- */
+$('#appVer').textContent = APP_VERSION;
+async function doUpdate(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '업데이트 중…'; }
+  try { await applyUpdate(); } catch (err) { toast('업데이트 실패: ' + err.message, 4000); if (btn) { btn.disabled = false; btn.textContent = '업데이트'; } }
+}
+$('#updateNow').onclick = (e) => doUpdate(e.target);
+$('#updateCheck').onclick = async (e) => {
+  const btn = e.target;
+  btn.disabled = true; btn.textContent = '확인 중…';
+  try {
+    const v = await checkUpdate();
+    if (v) {
+      if (confirm(`새 버전 ${v}이 있어요. 지금 업데이트할까요?`)) return doUpdate(btn);
+    } else toast(`이미 최신 버전이에요 (${APP_VERSION})`);
+  } catch (err) { toast('확인 실패: ' + err.message, 3500); }
+  btn.disabled = false; btn.textContent = '업데이트 확인';
+};
+// 앱을 열 때 자동으로 한 번 확인 → 새 버전이면 홈에 배너 표시
+checkUpdate().then((v) => {
+  if (v) { $('#updateVer').textContent = v; $('#updateBanner').classList.remove('hidden'); }
+}).catch(() => {});
 
 /* ---------- PWA ---------- */
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

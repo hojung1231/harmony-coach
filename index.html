@@ -17,6 +17,10 @@
   <section class="screen active" id="home">
     <header><h1>🎤 화음 코치</h1><button class="icon" data-go="settings" aria-label="설정">⚙️</button></header>
     <div class="content">
+      <div id="updateBanner" class="banner hidden">
+        <span>✨ 새 버전 <b id="updateVer"></b>이 있어요</span>
+        <button class="primary" id="updateNow">업데이트</button>
+      </div>
       <div id="songList" class="list"></div>
       <p id="emptyMsg" class="muted center">아직 노래가 없어요. 노래를 추가해서 시작하세요.</p>
       <button class="primary big" data-go="import">＋ 새 노래 추가</button>
@@ -167,6 +171,10 @@
       <label class="chk"><input type="checkbox" id="setOct" />옥타브 무시 (남녀 음역 차이 허용)</label>
       <label class="chk"><input type="checkbox" id="setAec" />마이크 에코 제거 (스피커 사용 시)</label>
       <label class="field">가이드음 볼륨 <input type="range" id="setVol" min="0" max="0.4" step="0.02" /></label>
+      <hr />
+      <h3>앱 업데이트</h3>
+      <div class="row"><span class="muted">현재 버전 <b id="appVer"></b></span><span class="spacer"></span><button id="updateCheck">업데이트 확인</button></div>
+      <p class="muted small">업데이트해도 저장한 노래와 기록은 지워지지 않아요.</p>
       <hr />
       <h3>마이크 테스트</h3>
       <div class="row"><button id="micTest">🎙 테스트</button><span id="micOut" class="mono">-</span></div>

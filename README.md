@@ -34,3 +34,12 @@
 빌드 과정 없는 순수 HTML/JS입니다. 로컬 실행: `python3 -m http.server` 후 `http://localhost:8000`.
 `main`에 push하면 `.github/workflows/pages.yml`이 GitHub Pages로 자동 배포합니다.
 (저장소 Settings → Pages → Source를 **GitHub Actions**로 설정)
+
+## 새 버전 배포 방법
+버전을 올릴 때는 아래 세 곳의 버전 숫자를 똑같이 바꾼 뒤 push 합니다.
+- `version.json` → `"version"`
+- `js/update.js` → `APP_VERSION`
+- `sw.js` → `CACHE` 이름
+
+앱은 켤 때마다 `version.json`을 확인하고, 새 버전이면 홈 화면에 **업데이트** 배너를 띄웁니다.
+설정 화면의 **업데이트 확인** 버튼으로 직접 확인할 수도 있어요. 업데이트해도 저장한 노래와 기록은 유지됩니다.
