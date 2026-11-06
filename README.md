@@ -15,7 +15,8 @@
 - 모든 데이터는 폰 안(IndexedDB)에만 저장, 오프라인 동작
 
 ## 폰에 설치하기
-1. GitHub Pages 주소(`https://<아이디>.github.io/harmony-coach/`)를 폰 브라우저로 엽니다.
+1. 이 저장소를 무료 정적 호스팅(Cloudflare Pages / Netlify / Vercel)에 연결해 주소를 만들고, 그 주소를 폰 브라우저로 엽니다.
+   - 빌드 명령: 없음 · 출력(배포) 폴더: `/` (저장소 루트)
 2. **Android(Chrome)**: 메뉴 ⋮ → "홈 화면에 추가"/"앱 설치"
    **iPhone(Safari)**: 공유 버튼 → "홈 화면에 추가"
 3. 홈 화면 아이콘으로 실행하면 일반 앱처럼 전체 화면으로 열려요.
@@ -32,5 +33,5 @@
 
 ## 개발
 빌드 과정 없는 순수 HTML/JS입니다. 로컬 실행: `python3 -m http.server` 후 `http://localhost:8000`.
-`main`에 push하면 `.github/workflows/pages.yml`이 GitHub Pages로 자동 배포합니다.
-(저장소 Settings → Pages → Source를 **GitHub Actions**로 설정)
+호스팅 서비스에 저장소를 연결해 두면 `main`에 push할 때마다 자동으로 다시 배포됩니다.
+(마이크 사용을 위해 반드시 **https** 주소여야 합니다 — 위 서비스들은 기본 https)
