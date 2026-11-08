@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <!-- 홈 -->
+  <!-- 홈: 내 노래 목록 -->
   <section class="screen active" id="home">
     <header><h1>🎤 화음 코치</h1><button class="icon" data-go="settings" aria-label="설정">⚙️</button></header>
     <div class="content">
@@ -21,34 +21,76 @@
         <span>✨ 새 버전 <b id="updateVer"></b>이 있어요</span>
         <button class="primary" id="updateNow">업데이트</button>
       </div>
+      <div class="row">
+        <button class="primary big" data-pick>＋ 음악 가져오기</button>
+        <button class="big" data-go="guide">🛒 음원 구하기</button>
+      </div>
+      <h3>내 노래 <span class="muted small" id="songCount"></span></h3>
       <div id="songList" class="list"></div>
-      <p id="emptyMsg" class="muted center">아직 노래가 없어요. 노래를 추가해서 시작하세요.</p>
-      <button class="primary big" data-go="import">＋ 새 노래 추가</button>
+      <div id="emptyMsg" class="card center">
+        <p><b>아직 노래가 없어요</b></p>
+        <p class="muted">① <b>음원 구하기</b>에서 노래를 사서 다운받고<br>② <b>음악 가져오기</b>로 받은 파일을 고르면<br>여기에 노래 목록이 생겨요.</p>
+        <button class="primary" data-go="guide">음원 구하는 법 보기</button>
+      </div>
+      <p class="muted small center">노래를 누르면 바로 재생하면서 화음 연습을 시작해요.</p>
     </div>
   </section>
 
-  <!-- 노래 추가 -->
-  <section class="screen" id="import">
-    <header><button class="icon" data-go="home">←</button><h2>노래 추가</h2></header>
+  <!-- 음원 구하는 법 -->
+  <section class="screen" id="guide">
+    <header><button class="icon" data-go="home">←</button><h2>음원 구하는 법</h2></header>
     <div class="content">
       <div class="card">
-        <h3>① 음원 파일 선택</h3>
-        <p class="muted">폰에 있는 mp3 / m4a / wav / mp4 파일을 고르세요.</p>
-        <label class="primary file-btn">파일 고르기<input type="file" id="fileInput" accept="audio/*,video/*" hidden /></label>
+        <h3>🔎 노래 찾아서 사기</h3>
+        <input id="buyQuery" placeholder="노래 제목이나 가수 (예: 좋은 날 아이유)" />
+        <div class="grid3">
+          <button data-store="melon">멜론</button>
+          <button data-store="genie">지니</button>
+          <button data-store="bugs">벅스</button>
+        </div>
+        <p class="muted small">누르면 그 음원 사이트의 검색 결과가 열려요. 로그인 후 <b>MP3 다운로드</b>(곡 구매 또는 다운로드 이용권, 유료)로 받으세요.</p>
       </div>
       <div class="card">
-        <h3>② 유튜브 프리미엄에서 녹음</h3>
-        <p class="muted">
-          유튜브 음원은 보호(DRM)되어 있어서 앱이 바로 가져올 수 없어요.
-          대신 <b>다른 기기(PC·태블릿·스피커)</b>에서 유튜브로 노래를 틀고, 이 폰을 가까이 두고 녹음하세요.
-          조용한 곳에서 녹음할수록 멜로디가 정확하게 나와요.
-        </p>
+        <h3>📥 다운받은 다음에는</h3>
+        <ol class="steps">
+          <li>받은 파일은 보통 폰의 <b>다운로드</b> 폴더(또는 Music 폴더)에 저장돼요.</li>
+          <li>화음 코치로 돌아와 <b>음악 가져오기</b>를 누르고 받은 파일을 골라요. 여러 곡을 한 번에 골라도 돼요.</li>
+          <li><b>내 노래</b> 목록에 생긴 노래를 누르면 재생과 함께 화음 연습이 시작돼요.</li>
+        </ol>
+        <p class="muted small">안드로이드: 파일 앱이나 음원 앱에서 곡을 <b>공유 → 화음 코치</b>로 보내도 목록에 추가돼요. (홈 화면에 앱을 설치한 경우)</p>
+        <button class="primary" data-pick>받은 음악 가져오기</button>
+      </div>
+      <div class="card warn">
+        <h3>⚠️ 이런 파일은 안 돼요</h3>
+        <ul class="steps">
+          <li><b>유튜브 프리미엄 오프라인 저장</b>, 스트리밍 이용권의 <b>'저장/캐시'</b> 곡은 그 앱 안에서만 재생되게 잠겨 있어서(DRM) 가져올 수 없어요.</li>
+          <li>살 때 상품 설명에 <b>MP3 다운로드</b>(파일로 소장)라고 되어 있는지 확인하세요. 가격과 조건은 서비스마다 다르고 바뀔 수 있어요.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>🍎 아이폰이라면</h3>
+        <p class="muted">사파리로 음원 사이트에서 MP3를 받으면 <b>파일 앱 → 다운로드</b>에 저장돼요. 음악 가져오기에서 <b>'파일 선택'</b>으로 그 파일을 고르세요. 애플 뮤직이나 아이튠즈로 산 곡은 파일로 꺼내기 어려워요.</p>
+      </div>
+      <div class="card">
+        <h3>🆓 무료로 하는 방법</h3>
+        <p class="muted">이미 가진 음원 파일(PC에서 옮기기, 카톡 '나와의 채팅'으로 보내서 저장 등)을 쓰거나, 다른 기기에서 유튜브로 노래를 틀고 이 폰으로 <b>녹음</b>할 수 있어요.</p>
+        <button data-go="import">🎙 녹음으로 추가하기</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 녹음으로 추가 -->
+  <section class="screen" id="import">
+    <header><button class="icon" data-go="home">←</button><h2>녹음으로 추가</h2></header>
+    <div class="content">
+      <div class="card">
+        <p class="muted">다른 기기(PC·태블릿·스피커)에서 유튜브 등으로 노래를 틀고, 이 폰을 가까이 두고 녹음하세요. 조용한 곳에서 녹음할수록 멜로디가 정확하게 나와요.</p>
+        <label class="field">노래 이름 <input id="songName" placeholder="예) 좋은 날 - 아이유" /></label>
         <div class="row">
           <button id="recBtn" class="primary">● 녹음 시작</button>
           <span id="recTime" class="mono">0:00</span>
         </div>
       </div>
-      <label class="field">노래 이름 <input id="songName" placeholder="예) 좋은 날 - 아이유" /></label>
     </div>
   </section>
 
@@ -91,7 +133,7 @@
       </div>
       <p class="muted small">그래프를 좌우로 끌어서 이동, 회색 멜로디 막대를 눌러 틀린 음을 고칠 수 있어요.</p>
       <div class="row">
-        <button class="primary big" id="edStart">▶ 원곡과 함께 연습</button>
+        <button class="primary big" id="edStart">▶ 재생하며 화음 연습</button>
       </div>
       <div class="row">
         <button class="big" id="edStep">🎯 원곡 없이 한 음씩 연습</button>
@@ -183,6 +225,7 @@
 
   <div id="toast" class="toast"></div>
   <audio id="audio" preload="auto" playsinline></audio>
+  <input type="file" id="fileInput" accept="audio/*,video/*,.mp3,.m4a,.wav,.flac,.ogg,.aac" multiple hidden />
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

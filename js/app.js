@@ -64,41 +64,110 @@ function rebuildHarm() {
 }
 async function saveCurrent() { if (current) await db.put(current); }
 
-/* ---------- 홈 ---------- */
+/* ---------- 홈: 내 노래 목록 ---------- */
 async function renderHome() {
   const songs = (await db.getAll()).sort((a, b) => b.createdAt - a.createdAt);
   const list = $('#songList'); list.innerHTML = '';
   $('#emptyMsg').classList.toggle('hidden', songs.length > 0);
+  $('#songCount').textContent = songs.length ? `${songs.length}곡` : '';
   for (const s of songs) {
     const el = document.createElement('div');
     el.className = 'song';
-    const ht = HARMONY_TYPES.find((h) => h.id === s.harmonyType);
-    el.innerHTML = `<div><div class="t"></div><div class="s"></div></div><div class="badge"></div>`;
+    el.innerHTML = `<div style="flex:1;min-width:0"><div class="t"></div><div class="s"></div></div><div class="badge"></div>`;
     el.querySelector('.t').textContent = s.name;
-    el.querySelector('.s').textContent = `${keyName(s.key)} · ${ht ? ht.label.split(' —')[0] : ''} · ${fmtTime(s.duration || 0)}`;
+    const sub = el.querySelector('.s');
+    if (s.notes) {
+      const ht = HARMONY_TYPES.find((h) => h.id === s.harmonyType);
+      sub.textContent = `${keyName(s.key)} · ${ht ? ht.label.split(' —')[0] : ''} · ${fmtTime(s.duration || 0)}`;
+    } else {
+      sub.innerHTML = '눌러서 시작 <span class="new">새 노래</span>';
+    }
     const b = el.querySelector('.badge');
     if (s.lastScore != null) { b.textContent = s.lastScore; b.style.color = s.lastScore >= 80 ? COLORS.good : s.lastScore >= 55 ? COLORS.warn : COLORS.bad; }
-    el.onclick = () => openSong(s.id);
+    const more = document.createElement('button');
+    more.className = 'more'; more.textContent = '⋯'; more.setAttribute('aria-label', '곡 설정');
+    more.onclick = (e) => { e.stopPropagation(); openSettings(s.id); };
+    el.appendChild(more);
+    el.onclick = () => playSong(s.id);
     list.appendChild(el);
   }
 }
-async function openSong(id) {
+
+async function loadSong(id) {
   current = await db.get(id);
+  if (!current) return false;
   if (audio.src) URL.revokeObjectURL(audio.src);
   audio.src = URL.createObjectURL(current.blob);
+  if (!current.notes && !(await analyzeSong(current))) return false;
   rebuildHarm();
-  show('editor');
+  return true;
 }
+// 노래 누르기 → (처음이면 분석) → 바로 재생하며 연습
+async function playSong(id) { if (await loadSong(id)) startPractice(null); }
+async function openSettings(id) { if (await loadSong(id)) show('editor'); }
 
-/* ---------- 노래 추가 ---------- */
-$('#fileInput').addEventListener('change', (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
-  const name = $('#songName').value.trim() || f.name.replace(/\.[^.]+$/, '');
+/* ---------- 음악 가져오기 ---------- */
+document.querySelectorAll('[data-pick]').forEach((b) => b.addEventListener('click', () => $('#fileInput').click()));
+$('#fileInput').addEventListener('change', async (e) => {
+  const files = [...e.target.files];
   e.target.value = '';
-  analyzeBlob(f, name);
+  if (files.length) await importFiles(files);
 });
 
+const AUDIO_EXT = /\.(mp3|m4a|aac|wav|flac|ogg|oga|opus|mp4|webm|3gp|amr)$/i;
+async function importFiles(files) {
+  const ok = files.filter((f) => (f.type || '').startsWith('audio/') || (f.type || '').startsWith('video/') || AUDIO_EXT.test(f.name || ''));
+  if (!ok.length) { toast('음악 파일이 아니에요'); return []; }
+  const existing = new Set((await db.getAll()).map((s) => s.name));
+  const added = [];
+  let i = 0;
+  for (const f of ok) {
+    const name = (f.name || '새 노래').replace(/\.[^.]+$/, '').replace(/_/g, ' ').trim() || '새 노래';
+    if (existing.has(name)) continue;
+    const song = {
+      id: `${Date.now()}-${i++}`, name, blob: f, duration: 0, createdAt: Date.now() + i,
+      notes: null, contour: null, key: null, harmonyType: 'third_up', octaveShift: 0, sensitivity: 0.5, edited: false, lastScore: null,
+    };
+    await db.put(song);
+    added.push(song);
+  }
+  const skipped = ok.length - added.length;
+  toast(added.length ? `${added.length}곡을 추가했어요${skipped ? ` (이미 있는 ${skipped}곡 제외)` : ''}` : '이미 목록에 있는 노래예요');
+  show('home');
+  return added;
+}
+
+// 안드로이드 '공유하기'로 받은 파일 (서비스워커가 임시 저장)
+async function receiveShared() {
+  if (!location.search.includes('shared=1') || !('caches' in window)) return;
+  history.replaceState(null, '', location.pathname);
+  try {
+    const cache = await caches.open('hc-shared');
+    const files = [];
+    for (const req of await cache.keys()) {
+      const res = await cache.match(req);
+      const name = decodeURIComponent(new URL(req.url).pathname.split('/').pop());
+      const blob = await res.blob();
+      files.push(new File([blob], name, { type: blob.type }));
+      await cache.delete(req);
+    }
+    if (files.length) await importFiles(files);
+  } catch (err) { toast('공유받은 파일을 읽지 못했어요: ' + err.message, 4000); }
+}
+
+/* ---------- 음원 구하기 ---------- */
+const STORES = {
+  melon: (q) => `https://www.melon.com/search/total/index.htm?q=${q}`,
+  genie: (q) => `https://www.genie.co.kr/search/searchMain?query=${q}`,
+  bugs: (q) => `https://music.bugs.co.kr/search/integrated?q=${q}`,
+};
+document.querySelectorAll('[data-store]').forEach((b) => b.addEventListener('click', () => {
+  const q = $('#buyQuery').value.trim();
+  if (!q) { toast('노래 제목을 먼저 적어주세요'); $('#buyQuery').focus(); return; }
+  window.open(STORES[b.dataset.store](encodeURIComponent(q)), '_blank', 'noopener');
+}));
+
+/* ---------- 녹음으로 추가 ---------- */
 let rec = null;
 $('#recBtn').addEventListener('click', async () => {
   if (rec) { rec.stop(); return; }
@@ -109,14 +178,18 @@ $('#recBtn').addEventListener('click', async () => {
     rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     const t0 = Date.now();
     const timer = setInterval(() => { $('#recTime').textContent = fmtTime((Date.now() - t0) / 1000); }, 250);
-    rec.onstop = () => {
+    rec.onstop = async () => {
       clearInterval(timer);
       stream.getTracks().forEach((t) => t.stop());
-      const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+      const type = rec.mimeType || 'audio/webm';
+      const blob = new Blob(chunks, { type });
       rec = null;
       $('#recBtn').textContent = '● 녹음 시작';
       const name = $('#songName').value.trim() || `녹음 ${new Date().toLocaleString('ko-KR')}`;
-      analyzeBlob(blob, name);
+      $('#songName').value = '';
+      const ext = type.includes('mp4') ? 'm4a' : 'webm';
+      const [song] = await importFiles([new File([blob], `${name}.${ext}`, { type })]);
+      if (song) playSong(song.id);
     };
     rec.start(1000);
     $('#recBtn').textContent = '■ 녹음 끝내기';
@@ -126,15 +199,16 @@ $('#recBtn').addEventListener('click', async () => {
   }
 });
 
-async function analyzeBlob(blob, name) {
+/* ---------- 멜로디 분석 (노래마다 처음 한 번) ---------- */
+async function analyzeSong(song) {
   show('analyze');
   const bar = $('#anaBar'), stage = $('#anaStage');
-  bar.style.width = '0%'; stage.textContent = '음원 불러오는 중';
+  bar.style.width = '0%'; stage.textContent = `'${song.name}' 불러오는 중`;
   try {
-    const buf = await blob.arrayBuffer();
+    const buf = await song.blob.arrayBuffer();
     const ctx = getCtx();
-    const ab = await new Promise((res, rej) => ctx.decodeAudioData(buf, res, rej));
-    stage.textContent = '보컬 멜로디 추출 중';
+    const ab = await new Promise((res, rej) => ctx.decodeAudioData(buf, res, (e) => rej(e || new Error('이 파일 형식은 열 수 없어요'))));
+    stage.textContent = '보컬 멜로디 따는 중';
     const left = ab.getChannelData(0).slice();
     const right = ab.numberOfChannels > 1 ? ab.getChannelData(1).slice() : null;
     const contour = await new Promise((res, rej) => {
@@ -148,24 +222,18 @@ async function analyzeBlob(blob, name) {
       w.postMessage({ left, right, sampleRate: ab.sampleRate }, right ? [left.buffer, right.buffer] : [left.buffer]);
     });
     stage.textContent = '화음 만드는 중';
-    const notes = segmentNotes(contour, 0.5);
+    const notes = segmentNotes(contour, song.sensitivity ?? 0.5);
     if (!notes.length) throw new Error('멜로디를 찾지 못했어요. 다른 음원으로 시도해 보세요.');
-    const key = detectKey(notes);
-    current = {
-      id: String(Date.now()), name, blob, duration: ab.duration, createdAt: Date.now(),
-      contour, notes, key, harmonyType: 'third_up', octaveShift: 0, sensitivity: 0.5, edited: false, lastScore: null,
-    };
-    await db.put(current);
-    if (audio.src) URL.revokeObjectURL(audio.src);
-    audio.src = URL.createObjectURL(blob);
-    rebuildHarm();
-    $('#songName').value = '';
-    toast(`분석 완료! ${notes.length}개 음 · ${keyName(key)}`);
-    show('editor');
+    Object.assign(song, { contour, notes, key: detectKey(notes), duration: ab.duration });
+    await db.put(song);
+    toast(`준비 완료! ${keyName(song.key)} · 화음: 3도 위 (곡 설정 ⋯에서 바꿀 수 있어요)`, 3500);
+    return true;
   } catch (err) {
     console.error(err);
-    toast('분석 실패: ' + err.message, 5000);
-    show('import');
+    const msg = (err && err.message) || String(err);
+    if (confirm(`'${song.name}'을(를) 열 수 없어요.\n(${msg})\n\n목록에서 지울까요?`)) await db.del(song.id);
+    show('home');
+    return false;
   }
 }
 
@@ -303,7 +371,7 @@ $('#prPlay').onclick = async () => {
 };
 $('#prRestart').onclick = () => { audio.currentTime = pr.range ? Math.max(0, pr.range.start - 1.5) : 0; pr.trace = []; };
 $('#prFinish').onclick = () => finishPractice();
-$('#prBack').onclick = () => show('editor');
+$('#prBack').onclick = () => show('home');
 audio.addEventListener('ended', () => { if ($('#practice').classList.contains('active')) finishPractice(); });
 
 function foldErr(sung, target) {
@@ -367,7 +435,7 @@ const rv = { notes: [], phrases: [], sel: 0, frames: [], range: null, stats: [] 
 function finishPractice() {
   cancelAnimationFrame(rafId);
   audio.pause(); voicesOff(); stopMic();
-  if (!pr.frames.length) { toast('기록된 노래가 없어요'); show('editor'); return; }
+  if (!pr.frames.length) { toast('기록된 노래가 없어요'); show('home'); return; }
   computeReview();
   show('review');
   renderReview();
@@ -595,4 +663,4 @@ checkUpdate().then((v) => {
 
 /* ---------- PWA ---------- */
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
-renderHome();
+receiveShared().finally(renderHome);

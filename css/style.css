@@ -58,3 +58,10 @@ button.danger { color: var(--bad); }
 hr { border: none; border-top: 1px solid var(--line); width: 100%; }
 @media (max-width: 380px) { .grid2 { grid-template-columns: 1fr; } }
 .banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #1d2b4a; border: 1px solid var(--accent); border-radius: 14px; padding: 10px 12px; font-size: 14px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; line-height: 1.5; font-size: 14px; }
+.card.warn { border-color: #6b5420; }
+.song .more { background: none; border: none; font-size: 20px; padding: 4px 8px; color: var(--muted); }
+.song .new { font-size: 11px; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; padding: 1px 6px; margin-left: 6px; }
+.row > .big + .big { flex: 0 0 auto; width: auto; }
+.card p.muted { font-size: 14px; }
