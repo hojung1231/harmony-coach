@@ -661,6 +661,11 @@ checkUpdate().then((v) => {
   if (v) { $('#updateVer').textContent = v; $('#updateBanner').classList.remove('hidden'); }
 }).catch(() => {});
 
+/* ---------- 안드로이드 브라우저면 APK 다운로드 안내 ---------- */
+const inApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const standalone = matchMedia('(display-mode: standalone)').matches;
+if (/Android/i.test(navigator.userAgent) && !inApp && !standalone) $('#apkBanner').classList.remove('hidden');
+
 /* ---------- PWA ---------- */
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 receiveShared().finally(renderHome);

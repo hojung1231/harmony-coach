@@ -1,0 +1,63 @@
+name: Build Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'android-build/**'
+      - '.github/workflows/android.yml'
+      - 'icons/**'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Create Capacitor project
+        run: |
+          mkdir -p app/www
+          cp -r index.html css js icons manifest.webmanifest sw.js version.json app/www/
+          cp android-build/capacitor.config.json app/
+          cd app
+          npm init -y >/dev/null
+          npm install @capacitor/core@6.2.0 @capacitor/cli@6.2.0 @capacitor/android@6.2.0
+          npx cap add android
+          npx cap sync android
+      - name: Microphone permission and icon
+        run: |
+          cd app/android/app/src/main
+          sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />#' AndroidManifest.xml
+          grep -n "RECORD_AUDIO" AndroidManifest.xml
+          rm -rf res/mipmap-anydpi-v26
+          for d in res/mipmap-*; do
+            cp "$GITHUB_WORKSPACE/icons/icon-192.png" "$d/ic_launcher.png"
+            cp "$GITHUB_WORKSPACE/icons/icon-192.png" "$d/ic_launcher_round.png"
+            rm -f "$d/ic_launcher_foreground.png"
+          done
+      - name: Build APK
+        run: |
+          mkdir -p ~/.android
+          cp android-build/debug.keystore ~/.android/debug.keystore
+          cd app/android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/harmony-coach.apk"
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android
+          name: 화음 코치 안드로이드 앱
+          body: |
+            📱 안드로이드 폰에서 아래 harmony-coach.apk 를 눌러 다운로드한 뒤 설치하세요.
+            처음 설치할 때 "출처를 알 수 없는 앱" 설치 허용이 필요할 수 있어요.
+            앱 내용은 자동으로 최신 버전을 불러와요 (앱 안 업데이트 버튼).
+          files: harmony-coach.apk
+          make_latest: true

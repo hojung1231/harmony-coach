@@ -1,5 +1,5 @@
 // 앱 업데이트 확인 / 적용
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.2.1';
 
 const ASSETS = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/music.js', 'js/pitch.js', 'js/graph.js',
   'js/db.js', 'js/update.js', 'js/analyzer-worker.js', 'manifest.webmanifest', 'sw.js'];

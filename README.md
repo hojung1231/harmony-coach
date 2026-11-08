@@ -17,6 +17,9 @@
 - 모든 데이터는 폰 안(IndexedDB)에만 저장, 오프라인 동작
 
 ## 폰에 설치하기
+**안드로이드 앱(APK) 다운로드:** https://github.com/hojung1231/harmony-coach/releases/download/android/harmony-coach.apk
+
+### 웹앱으로 설치
 1. GitHub Pages 주소(`https://<아이디>.github.io/harmony-coach/`)를 폰 브라우저로 엽니다.
 2. **Android(Chrome)**: 메뉴 ⋮ → "홈 화면에 추가"/"앱 설치"
    **iPhone(Safari)**: 공유 버튼 → "홈 화면에 추가"
