@@ -247,13 +247,12 @@ function stopPlay() {
   origEl.pause();
   if (voice) voice.off();
   if (melVoice) melVoice.off();
-  if (mic) { mic.stop(); mic = null; }
 }
 async function togglePlay() {
   getCtx();
   if (!mic) {
     try { mic = new MicPitch(); await mic.start(actx, { aec: S.filter }); }
-    catch (err) { mic = null; toast('마이크를 허용해 주세요', 3000); }
+    catch (err) { mic = null; toast('마이크를 허용해 주세요. 설정 → 앱 → 화음 코치 → 권한 → 마이크 → "앱 사용 중에만 허용"', 5000); }
     try { await actx.resume(); } catch {}   // 마이크 켤 때 소리가 멈추는 기기 대비
   }
   if (P.playing) { P.t = now(); P.playing = false; origEl.pause(); voice.off(); melVoice.off(); $('#plPlay').textContent = '▶'; }
@@ -560,6 +559,8 @@ function renderSettings() {
 document.querySelectorAll('#tolSeg button').forEach((b) => b.onclick = () => { S.tol = +b.dataset.t; save(); renderSettings(); });
 $('#setOct').onchange = (e) => { S.octaveFree = e.target.checked; save(); };
 $('#setAec').onchange = (e) => { S.filter = e.target.checked; save(); if (mic) { mic.stop(); mic = null; } };
+// 앱을 닫거나 다른 앱으로 가면 마이크 끔 (돌아오면 다음 재생 때 다시 켬 — 권한은 다시 묻지 않음)
+document.addEventListener('visibilitychange', () => { if (document.hidden && mic) { if (P.playing) togglePlay(); mic.stop(); mic = null; } });
 $('#soundTest').onclick = () => {
   getCtx();
   voice.set(57, S.vol); setTimeout(() => voice.set(61, S.vol), 400); setTimeout(() => voice.set(64, S.vol), 800); setTimeout(() => voice.off(), 1300);
