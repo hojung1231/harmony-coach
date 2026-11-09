@@ -261,7 +261,7 @@ async function togglePlay() {
   else {
     if (now() >= P.end - 0.05) { P.t = 0; P.hit = 0; P.tot = 0; if (ORIG()) origEl.currentTime = 0; }
     P.baseT = P.t; P.base = performance.now(); P.playing = true; $('#plPlay').textContent = '⏸';
-    if (S.filter) P.calib = { t0: performance.now(), lv: [] };
+    P.calib = { t0: performance.now(), lv: [], amp: [] };
     if (ORIG()) { try { await origEl.play(); } catch (e) { toast('원곡을 재생할 수 없어요: ' + e.message); } }
   }
 }
@@ -420,28 +420,58 @@ function frame() {
 
   // 내 목소리 (반응 시간 0.12초 감안)
   let sung = mic ? mic.read() : null;
-  // 스피커 소리 크기 재기: 재생 시작 후 처음 ~0.9초(카운트·첫 화음음) 동안, 사용자가 조용할 때 마이크에 들어오는 소리
-  if (mic && P.playing && P.calib && performance.now() - P.calib.t0 < 900) { P.calib.lv.push(mic.level || 0); }
-  else if (P.calib && P.calib.lv.length) { const a = P.calib.lv.sort((x, y) => x - y); P.leak = a[Math.floor(a.length * 0.7)] || 0; P.calib = null; }
+  const lvl = mic ? (mic.level || 0) : 0;
+  // 지금 앱이 내는 소리 크기(스피커 누출이 이 크기에 비례한다고 봄)
+  const outAmp = (toneMidi != null ? S.vol : 0) + (melMidi != null ? S.melVol : 0) + (ORIG() && origEl && !origEl.paused ? S.origVol * 0.5 : 0);
+  // ① 시작 카운트 동안(사용자 조용) 마이크로 들어오는 소리 = 방 소음 + 스피커 누출
+  if (mic && P.playing && P.calib && performance.now() - P.calib.t0 < 900) { P.calib.lv.push(lvl); P.calib.amp.push(outAmp); }
+  else if (P.calib && P.calib.lv.length) {
+    const a = P.calib.lv.slice().sort((x, y) => x - y);
+    const on = P.calib.lv.filter((_, i) => P.calib.amp[i] > 0.01).sort((x, y) => x - y), off = P.calib.lv.filter((_, i) => P.calib.amp[i] <= 0.01).sort((x, y) => x - y);
+    const ampOn = P.calib.amp.filter((x) => x > 0.01), amp = ampOn.length ? ampOn.reduce((x, y) => x + y, 0) / ampOn.length : 0;
+    const q = on.length ? on[Math.floor(on.length * 0.8)] : (a[Math.floor(a.length * 0.8)] || 0);
+    P.noise = off.length >= 3 ? off[Math.floor(off.length * 0.6)] : Math.min(q, a[Math.floor(a.length * 0.2)] || 0);   // 아무것도 안 날 때의 바닥 소음
+    P.noiseCal = P.noise;
+    P.leakPerAmp = amp > 0.01 ? Math.max(0, q - P.noise) / amp : (P.leakPerAmp || 0);
+    P.calib = null;
+  }
+  // ② 쉬는 구간(목표 음 없음, 다음 음까지 0.4초 이상)엔 사용자도 조용하다고 보고 계속 다시 잼
+  if (mic && P.playing && !P.calib && target == null && !(TL.find((n) => n[0] > t && n[0] - t < 0.4))) {
+    (P.restLv ||= []).push({ lvl, outAmp }); if (P.restLv.length > 90) P.restLv.shift();
+    if (P.restLv.length >= 20) {
+      const quietOnes = P.restLv.filter((r) => r.outAmp < 0.01).map((r) => r.lvl).sort((x, y) => x - y);
+      // 쉬는 구간에 흥얼거려도 기준이 크게 오르지 않게: 시작 때 잰 값의 2배까지만
+      if (quietOnes.length >= 10) P.noise = Math.min(quietOnes[Math.floor(quietOnes.length * 0.6)], Math.max(0.004, (P.noiseCal ?? 0.003) * 2));
+    }
+  }
+  // 지금 예상되는 '내 목소리가 아닌' 소리 크기
+  const expect = Math.max(0.003, (P.noise ?? 0.003)) + (P.leakPerAmp || 0) * outAmp;
   const rawSung = sung;
   if (P.lock && P.lock.ni !== ni && ni >= 0) {
     // 다음 음이 같은 화음 음(이음줄·같은 음 반복)이면 잠금 이어감
     if (harm[ni] === harm[P.lock.ni] && TL[ni][0] - (TL[P.lock.ni][0] + TL[P.lock.ni][1]) < 0.15) P.lock.ni = ni; else P.lock = null;
   }
-  if (sung != null && S.filter) {
-    // 버리는 건 딱 하나: 앱이 지금 내보내는 음(화음음·멜로디음·원곡 노래)과 같은 음이면서
-    // 스피커에서 새어 들어오는 크기보다 크게 크지 않은 소리. 그 외엔 모두 내 목소리로 인정.
-    const near = (a, b) => { let d = a - b; d -= 12 * Math.round(d / 12); return Math.abs(d) < 0.4; };
-    const outs = [];
-    if (toneMidi != null) outs.push(toneMidi);
-    if (melMidi != null) outs.push(melMidi);
-    if (ORIG() && ni >= 0) outs.push(current.notes[ni][2]);      // 원곡 가수 목소리 = 멜로디
-    // 한 음 안에서 이미 내 목소리로 인정됐으면(음 시작에 또렷하게 냈으면) 그 음이 끝날 때까지 기준을 낮춤 → 긴 음도 계속 인식
+  const near = (x, y) => { let d = x - y; d -= 12 * Math.round(d / 12); return Math.abs(d) < 0.4; };
+  if (sung != null) {
+    // ③ 음이 안정적이어야 함: 최근 감지값들이 1반음 안에서 모여 있어야 (소음은 마구 튐)
+    (P.raw ||= []).push(sung); if (P.raw.length > 4) P.raw.shift();
+    const r = P.raw.slice().sort((x, y) => x - y);
+    if (P.raw.length < 3 || r[r.length - 1] - r[0] > 1.2) sung = null;
+  } else P.raw = [];
+  if (sung != null) {
     const locked = P.lock && P.lock.ni === ni && near(sung, P.lock.m);
-    const gate = locked ? Math.max(0.004, (P.leak || 0) * 1.1) : Math.max(0.006, (P.leak || 0) * 2.2);
-    const quiet = (mic.level || 0) < gate;
-    if (quiet && outs.some((o) => near(sung, o))) sung = null;
-    else if (ni >= 0) P.lock = { ni, m: sung };
+    // ④ 소음·스피커 소리보다 확실히 커야 목소리 (긴 음은 시작이 또렷했으면 끝까지 기준을 낮춤)
+    const minLv = Math.max(0.006, expect * (locked ? 1.25 : 1.8));
+    if (lvl < minLv) sung = null;
+    else if (S.filter) {
+      // ⑤ 앱이 지금 내는 음(화음음·멜로디음·원곡 노래)과 같은 음이면 더 커야 함
+      const outs = [];
+      if (toneMidi != null) outs.push(toneMidi);
+      if (melMidi != null) outs.push(melMidi);
+      if (ORIG() && ni >= 0) outs.push(current.notes[ni][2]);
+      if (!locked && outs.some((o) => near(sung, o)) && lvl < expect * 2.0) sung = null;
+    }
+    if (sung != null && ni >= 0 && !locked) P.lock = { ni, m: sung };   // 인정된 음은 그 음 끝까지 잠금
   }
   const nowMs = performance.now();
   if (sung != null) { P.hist.push(sung); if (P.hist.length > 5) P.hist.shift(); P.lastVoice = nowMs; }
@@ -683,6 +713,6 @@ checkUpdate().then((v) => { if (v) { $('#updateVer').textContent = v; $('#update
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 renderHome();
 // 점검용: 소리 상태 (개발자 도구에서 __hc() 로 확인)
-window.__hc = () => ({ ctx: actx && actx.state, harm: voice && voice.cur, harmGain: voice && +voice.g.gain.value.toFixed(3), mel: melVoice && melVoice.cur });
+window.__hc = () => ({ ctx: actx && actx.state, harm: voice && voice.cur, harmGain: voice && +voice.g.gain.value.toFixed(3), mel: melVoice && melVoice.cur, melGain: melVoice && +melVoice.g.gain.value.toFixed(3), vol: S.vol, melVol: S.melVol });
 window.__seek = (t) => { if (ORIG()) origEl.currentTime = t; else { P.t = t; P.baseT = t; P.base = performance.now(); } };
-window.__leak = () => P.leak;
+window.__leak = () => ({ noise: P.noise, leakPerAmp: P.leakPerAmp });

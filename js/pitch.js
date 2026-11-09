@@ -43,7 +43,7 @@ export class MicPitch {
     }
     rms = Math.sqrt(rms / x.length);
     this.level = rms;
-    if (rms < 0.004) { this.hist = []; return null; }
+    if (rms < 0.005) { this.hist = []; return null; }
 
     d[0] = 1;
     let run = 0, tau = -1;
@@ -54,7 +54,7 @@ export class MicPitch {
       d[t] = run ? (s * t) / run : 1;
     }
     for (let t = tauMin; t < tauMax; t++) {
-      if (d[t] < 0.2) {
+      if (d[t] < 0.17) {
         while (t + 1 < tauMax && d[t + 1] < d[t]) t++;
         tau = t; break;
       }
@@ -62,7 +62,7 @@ export class MicPitch {
     if (tau < 0) {
       let mv = 1, mi = -1;
       for (let t = tauMin; t < tauMax; t++) if (d[t] < mv) { mv = d[t]; mi = t; }
-      if (mv < 0.45) tau = mi; else { this.hist = []; return null; }
+      if (mv < 0.3) tau = mi; else { this.hist = []; return null; }
     }
     const a = d[tau - 1], b = d[tau], c = d[tau + 1];
     const den = a - 2 * b + c;
