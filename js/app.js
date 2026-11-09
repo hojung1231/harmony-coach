@@ -11,11 +11,11 @@ const noteLabel = (m) => `${NAMES[pcOf(m)]}${Math.floor(Math.round(m) / 12) - 1}
 const fmt = (t) => `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, '0')}`;
 
 /* ---------- 설정 ---------- */
-const DEF = { tol: 50, octaveFree: true, vol: 0.3, melVol: 0.3, aec: false, orig: false, speed: 1, mel: true, harm: 'third_up', tone: true };
+const DEF = { tol: 50, octaveFree: true, vol: 0.15, melVol: 0.12, origVol: 0.8, filter: true, orig: false, speed: 1, mel: true, harm: 'third_up', tone: true };
 let S = { ...DEF };
 try { S = { ...DEF, ...JSON.parse(localStorage.getItem('hc2') || '{}') }; } catch {}
 const save = () => { try { localStorage.setItem('hc2', JSON.stringify(S)); } catch {} };
-if (!S.sv || S.sv < 3) { S.vol = DEF.vol; S.melVol = DEF.melVol; S.aec = false; S.mel = true; S.sv = 3; save(); }   // 2.3: 소리 크게, 멜로디음 기본 켬
+if (!S.sv || S.sv < 4) { S.vol = DEF.vol; S.melVol = DEF.melVol; S.origVol = DEF.origVol; S.filter = true; S.mel = S.mel ?? true; S.sv = 4; save(); }   // 2.4: 스피커 소리 걸러내기 기본 켬, 볼륨 세분화
 
 function toast(msg, ms = 2200) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
@@ -64,6 +64,23 @@ function attachLyrics(song, text) {
   return { lines, used: p, need: sylIdx.length };
 }
 function countSyl(text) { return text.split('\n').reduce((a, l) => a + lineWords(l).flat().length, 0); }
+/** 복사할 때 딸려 온 제목·가수·작사/작곡 줄 빼기, 그래도 음절이 많으면 앞뒤 줄을 맞을 때까지 덜어냄 */
+function cleanLyrics(text, song) {
+  const norm = (s) => s.replace(/\s+/g, '').toLowerCase();
+  const title = norm(song.title || ''), artist = norm(song.artist || '');
+  let lines = text.split('\n').filter((raw) => {
+    const n = norm(raw);
+    if (!n) return true;
+    if (n === title || n === artist || n === title + artist || n === artist + title) return false;
+    if (title && n.includes(title) && n.length <= title.length + artist.length + 4) return false;
+    if (/^(작사|작곡|편곡|노래|가수|가사|lyrics|앨범|발매)/i.test(raw.trim()) || /(작사|작곡|편곡)\s*[:：]/.test(raw)) return false;
+    return true;
+  });
+  const need = song.notes.filter((x) => x[3]).length, cnt = (ls) => countSyl(ls.join('\n'));
+  while (lines.length > 1 && cnt(lines) > need && cnt(lines.slice(1)) >= need) lines.shift();
+  while (lines.length > 1 && cnt(lines) > need && cnt(lines.slice(0, -1)) >= need) lines.pop();
+  return lines.join('\n').trim();
+}
 
 /* ---------- 곡 목록 ---------- */
 let builtin = null;
@@ -127,25 +144,31 @@ async function openSong(song) {
 }
 function checkLyrics() {
   if (!current) return;
-  const need = current.notes.filter((n) => n[3]).length, got = countSyl($('#lyText').value);
+  const need = current.notes.filter((n) => n[3]).length, got = countSyl(cleanLyrics($('#lyText').value, current));
   $('#lyCheck').textContent = !got ? `악보 음절 ${need}개` : got === need ? `✓ 음절 ${got}개 — 악보와 딱 맞아요` : `음절 ${got}개 / 악보 ${need}개 — 조금 다르지만 그대로 쓸 수 있어요`;
 }
 $('#lyText').addEventListener('input', checkLyrics);
 $('#lySave').onclick = async () => {
-  const text = $('#lyText').value.trim();
+  const text = cleanLyrics($('#lyText').value, current);
   if (!text) return toast('가사를 붙여넣어 주세요');
+  if (text !== $('#lyText').value.trim()) toast('제목·가수 같은 가사 아닌 줄은 뺐어요', 2500);
   await db.put({ id: 'lyrics:' + current.id, text });
   startPlay(text);
 };
 
 /* ---------- 연습 ---------- */
-let actx, voice, melVoice, mic;
+let actx, voice, melVoice, mic, origGain = null;
+function applyOrigVol() { if (origGain) origGain.gain.value = S.origVol; else origEl.volume = Math.min(1, S.origVol); }
 const P = { t: 0, playing: false, base: 0, baseT: 0, hist: [], state: 'none', pend: 'none', pendN: 0, hit: 0, tot: 0, end: 0 };
 
 function getCtx() {
   // 아이폰: 무음 모드에서도 소리 나게 + 마이크와 함께 쓰기
   try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch {}
-  if (!actx) { actx = new (window.AudioContext || window.webkitAudioContext)(); voice = new Voice(actx, 'saw'); melVoice = new Voice(actx, 'sine'); }
+  if (!actx) {
+    actx = new (window.AudioContext || window.webkitAudioContext)(); voice = new Voice(actx, 'saw'); melVoice = new Voice(actx, 'sine');
+    try { const src = actx.createMediaElementSource(origEl); origGain = actx.createGain(); src.connect(origGain).connect(actx.destination); } catch {}
+    applyOrigVol();
+  }
   if (actx.state !== 'running') actx.resume();
   return actx;
 }
@@ -208,7 +231,7 @@ async function loadOrig() {
 }
 
 function startPlay(text) {
-  lyr = attachLyrics(current, text);
+  lyr = attachLyrics(current, cleanLyrics(text, current));
   buildNoteSyl();
   buildTL();
   loadOrig().then(() => { buildTL(); syncButtons(); });
@@ -229,7 +252,7 @@ function stopPlay() {
 async function togglePlay() {
   getCtx();
   if (!mic) {
-    try { mic = new MicPitch(); await mic.start(actx, { aec: S.aec }); }
+    try { mic = new MicPitch(); await mic.start(actx, { aec: S.filter }); }
     catch (err) { mic = null; toast('마이크를 허용해 주세요', 3000); }
     try { await actx.resume(); } catch {}   // 마이크 켤 때 소리가 멈추는 기기 대비
   }
@@ -269,6 +292,22 @@ $('#origFile').addEventListener('change', async (e) => {
 });
 origEl.addEventListener('ended', () => { if (P.playing && ORIG()) finish(); });
 $('#plBack').onclick = () => show('home');
+$('#plLyrics').onclick = async () => {
+  $('#lyTitle').textContent = `${current.title} 가사`;
+  $('#lyText').value = (await lyricsOf(current)) || '';
+  checkLyrics(); show('lyrics');
+};
+// 볼륨 패널
+$('#plVolBtn').onclick = () => { const v = $('#volPanel'); v.hidden = !v.hidden; syncVol(); };
+const toGain = (x, max) => max * Math.pow(x / 100, 2);       // 0~100 → 0~max (작은 소리 쪽을 촘촘하게)
+const toSlider = (g, max) => Math.round(Math.sqrt(Math.max(0, g) / max) * 100);
+function syncVol() {
+  $('#vTone').value = toSlider(S.vol, 0.6); $('#vMel').value = toSlider(S.melVol, 0.6); $('#vOrig').value = toSlider(S.origVol, 1);
+  $('#vToneN').textContent = $('#vTone').value; $('#vMelN').textContent = $('#vMel').value; $('#vOrigN').textContent = $('#vOrig').value;
+}
+for (const [id, key, max] of [['#vTone', 'vol', 0.6], ['#vMel', 'melVol', 0.6], ['#vOrig', 'origVol', 1]]) {
+  $(id).addEventListener('input', (e) => { S[key] = toGain(+e.target.value, max); save(); syncVol(); applyOrigVol(); });
+}
 document.querySelectorAll('#harmSeg button').forEach((b) => b.onclick = () => { S.harm = b.dataset.h; save(); syncButtons(); });
 function syncButtons() {
   for (const [id, on] of [['#plTone', S.tone], ['#plMel', S.mel], ['#plOrig', ORIG()]]) { $(id).classList.toggle('off', !on); $(id).setAttribute('aria-pressed', on); }
@@ -337,12 +376,25 @@ function frame() {
     const beat = Math.floor(t / (current.eighth * 3));
     if (beat !== P.lastBeat) { P.lastBeat = beat; Voice.blip(actx, 84); }
   } else P.lastBeat = -1;
-  // 화음음
-  if (voice) voice.set(P.playing && S.tone && target != null ? target : null, S.vol);
-  if (melVoice) melVoice.set(P.playing && S.mel && ni >= 0 ? current.notes[ni][2] : null, S.melVol);
+  // 화음음: 걸러내기 켜면 음이 바뀔 때만 짧게(0.35초) — 그 뒤 내 목소리만 판정
+  // 0.45초 이상인 음에서 음이 바뀔 때만, 최대 0.3초(또는 음 길이의 40%)
+  const cueLen = ni >= 0 && TL[ni][1] >= 0.45 && (ni === 0 || harm[ni - 1] !== harm[ni] || TL[ni][0] - (TL[ni - 1][0] + TL[ni - 1][1]) > 0.3)
+    ? Math.min(0.3 * rate(), TL[ni][1] * 0.4) : 0;
+  const inCue = ni >= 0 && t - TL[ni][0] < cueLen;
+  const toneOn = P.playing && S.tone && target != null && (!S.filter || inCue);
+  if (voice) voice.set(toneOn ? target : null, S.vol);
+  const melMidi = P.playing && S.mel && ni >= 0 ? current.notes[ni][2] : null;
+  if (melVoice) melVoice.set(melMidi, S.melVol);
 
   // 내 목소리 (반응 시간 0.12초 감안)
-  const sung = mic ? mic.read() : null;
+  let sung = mic ? mic.read() : null;
+  if (sung != null && S.filter) {
+    const near = (a, b) => { let d = a - b; d -= 12 * Math.round(d / 12); return Math.abs(d) < 0.35; };
+    // 스피커에서 나온 멜로디음을 잡은 것 → 무시 (화음 목표와 다를 때만)
+    if (melMidi != null && near(sung, melMidi) && target != null && !near(sung, target)) sung = null;
+    // 화음음이 나오는 중(+여운 0.1초)은 판정 안 함
+    if (S.tone && cueLen > 0 && t - TL[ni][0] < cueLen + 0.06) sung = null;
+  }
   if (sung != null) { P.hist.push(sung); if (P.hist.length > 5) P.hist.shift(); } else P.hist = [];
   const tj = noteIndexAt(t - 0.12 * rate());
   const tgt = tj >= 0 ? harm[tj] : target;
@@ -464,19 +516,17 @@ $('#rsAgain').onclick = () => openSong(current);
 /* ---------- 설정 ---------- */
 function renderSettings() {
   document.querySelectorAll('#tolSeg button').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.t === S.tol));
-  $('#setAec').checked = S.aec; $('#setOct').checked = S.octaveFree; $('#setVol').value = S.vol; $('#setMelVol').value = S.melVol;
+  $('#setAec').checked = S.filter; $('#setOct').checked = S.octaveFree;
   $('#appVer').textContent = APP_VERSION;
 }
 document.querySelectorAll('#tolSeg button').forEach((b) => b.onclick = () => { S.tol = +b.dataset.t; save(); renderSettings(); });
 $('#setOct').onchange = (e) => { S.octaveFree = e.target.checked; save(); };
-$('#setAec').onchange = (e) => { S.aec = e.target.checked; save(); };
+$('#setAec').onchange = (e) => { S.filter = e.target.checked; save(); if (mic) { mic.stop(); mic = null; } };
 $('#soundTest').onclick = () => {
   getCtx();
   voice.set(57, S.vol); setTimeout(() => voice.set(61, S.vol), 400); setTimeout(() => voice.set(64, S.vol), 800); setTimeout(() => voice.off(), 1300);
   toast('라·도#·미 소리가 들리면 정상이에요. 안 들리면 미디어 볼륨과 무음 모드를 확인하세요.', 3500);
 };
-$('#setVol').onchange = (e) => { S.vol = +e.target.value; save(); };
-$('#setMelVol').onchange = (e) => { S.melVol = +e.target.value; save(); };
 $('#origClear').onclick = async () => {
   for (const s of await db.getAll()) if (String(s.id).startsWith('audio:')) await db.del(s.id);
   S.orig = false; save(); toast('연결한 원곡 파일을 지웠어요');

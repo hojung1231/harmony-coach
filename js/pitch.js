@@ -83,7 +83,7 @@ export class Voice {
       // 공용 출력: 압축기로 크게, 찌그러지지 않게
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -18; comp.ratio.value = 4;
-      const master = ctx.createGain(); master.gain.value = 1.6;
+      const master = ctx.createGain(); master.gain.value = 1;
       master.connect(comp).connect(ctx.destination);
       ctx._master = master;
     }
