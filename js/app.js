@@ -11,7 +11,7 @@ const noteLabel = (m) => `${NAMES[pcOf(m)]}${Math.floor(Math.round(m) / 12) - 1}
 const fmt = (t) => `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, '0')}`;
 
 /* ---------- 설정 ---------- */
-const DEF = { tol: 50, octaveFree: true, vol: 0.15, melVol: 0.12, origVol: 0.8, filter: true, orig: false, speed: 1, mel: true, harm: 'third_up', tone: true };
+const DEF = { tol: 50, octaveFree: true, view: 'arrow', vol: 0.15, melVol: 0.12, origVol: 0.8, filter: true, orig: false, speed: 1, mel: true, harm: 'third_up', tone: true };
 let S = { ...DEF };
 try { S = { ...DEF, ...JSON.parse(localStorage.getItem('hc2') || '{}') }; } catch {}
 const save = () => { try { localStorage.setItem('hc2', JSON.stringify(S)); } catch {} };
@@ -159,7 +159,7 @@ $('#lySave').onclick = async () => {
 /* ---------- 연습 ---------- */
 let actx, voice, melVoice, mic, origGain = null;
 function applyOrigVol() { if (origGain) origGain.gain.value = S.origVol; else origEl.volume = Math.min(1, S.origVol); }
-const P = { t: 0, playing: false, base: 0, baseT: 0, hist: [], state: 'none', pend: 'none', pendN: 0, hit: 0, tot: 0, end: 0 };
+const P = { trace: [], t: 0, playing: false, base: 0, baseT: 0, hist: [], state: 'none', pend: 'none', pendN: 0, hit: 0, tot: 0, end: 0 };
 
 function getCtx() {
   // 아이폰: 무음 모드에서도 소리 나게 + 마이크와 함께 쓰기
@@ -213,6 +213,7 @@ function timeAtEighth(x, tl = TL) {
 }
 // 모드 바꾸기 (재생 위치 유지)
 function switchMode(fn) {
+  P.trace = [];
   const wasPlaying = P.playing, atStart = now() <= 0.01, pos = eighthAt(now());
   if (ORIG()) origEl.pause();
   fn();
@@ -235,7 +236,8 @@ function startPlay(text) {
   buildNoteSyl();
   buildTL();
   loadOrig().then(() => { buildTL(); syncButtons(); });
-  P.t = 0; P.playing = false; P.hit = 0; P.tot = 0; P.hist = []; setState('none');
+  P.t = 0; P.playing = false; P.hit = 0; P.tot = 0; P.hist = []; P.trace = []; setState('none');
+  applyView();
   $('#plTitle').textContent = current.title;
   $('#plPlay').textContent = '▶';
   syncButtons();
@@ -264,7 +266,7 @@ async function togglePlay() {
   }
 }
 $('#plPlay').onclick = togglePlay;
-$('#plRestart').onclick = () => { P.t = 0; P.baseT = 0; P.base = performance.now(); P.hit = 0; P.tot = 0; origEl.currentTime = 0; };
+$('#plRestart').onclick = () => { P.t = 0; P.baseT = 0; P.base = performance.now(); P.hit = 0; P.tot = 0; P.trace = []; origEl.currentTime = 0; };
 const tapTone = () => { S.tone = !S.tone; save(); syncButtons(); toast(S.tone ? '화음음 켬' : '화음음 끔', 900); };
 const tapMel = () => { S.mel = !S.mel; save(); syncButtons(); toast(S.mel ? '멜로디음 켬' : '멜로디음 끔', 900); };
 document.querySelectorAll('#speedSeg button').forEach((b) => b.onclick = () => {
@@ -292,6 +294,13 @@ $('#origFile').addEventListener('change', async (e) => {
 });
 origEl.addEventListener('ended', () => { if (P.playing && ORIG()) finish(); });
 $('#plBack').onclick = () => show('home');
+function applyView() {
+  const g = S.view === 'graph';
+  $('#play').classList.toggle('graph-mode', g);
+  $('#plView').textContent = g ? '화살표' : '그래프';
+  $('#plView').setAttribute('aria-label', g ? '화살표 모드로 바꾸기' : '그래프 모드로 바꾸기');
+}
+$('#plView').onclick = () => { S.view = S.view === 'graph' ? 'arrow' : 'graph'; save(); applyView(); toast(S.view === 'graph' ? '그래프 모드' : '화살표 모드', 900); };
 $('#plLyrics').onclick = async () => {
   $('#lyTitle').textContent = `${current.title} 가사`;
   $('#lyText').value = (await lyricsOf(current)) || '';
@@ -454,6 +463,16 @@ function frame() {
     cents = d * 100;
     st = Math.abs(cents) <= S.tol ? 'ok' : cents < 0 ? 'up' : 'down';
   }
+  // 그래프 모드용 내 목소리 궤적 (반응 시간만큼 앞으로 당겨 악보 시간에 맞춤)
+  if (P.playing && sung != null) {
+    let m = sung;
+    const ref = tgt != null ? tgt : P.lastTgt;
+    if (S.octaveFree && ref != null) m -= 12 * Math.round((m - ref) / 12);
+    const dc = tgt != null ? (m - tgt) * 100 : null;
+    P.trace.push({ t: t - 0.12 * rate(), m, s: dc == null ? 'none' : Math.abs(dc) <= S.tol ? 'ok' : dc < 0 ? 'up' : 'down' });
+    if (P.trace.length > 2400) P.trace.splice(0, 600);
+  }
+  if (tgt != null) P.lastTgt = tgt;
   // 깜빡임 방지: 같은 판정이 3프레임 이어질 때 바꿈. 판정이 끊겨도 0.5초는 마지막 판정 유지
   if (st !== 'none') P.lastJudge = nowMs;
   if (st === 'none' && P.playing && nowMs - (P.lastJudge || 0) < 500) st = P.state;
@@ -473,7 +492,7 @@ function frame() {
   else hint.textContent = `목표 ${noteLabel(tgt)} · ${cents == null ? '' : (cents > 0 ? '+' : '') + Math.round(cents) + '센트'}`;
 
   renderLyrics(t, ni);
-  drawStaff(t, ni);
+  if (S.view === 'graph') drawPitchGraph(t, ni); else drawStaff(t, ni);
   $('#plTime').textContent = `${fmt(t / rate())} / ${fmt(P.end / rate())}${rate() !== 1 ? ' · ' + rate() + '배' : ''}${ORIG() ? ' · 원곡' : ''}`;
   $('#prog').style.width = `${Math.min(100, (t / P.end) * 100)}%`;
   raf = requestAnimationFrame(frame);
@@ -552,6 +571,66 @@ function drawStaff(t, ni) {
   if (current.time) { const [a, b] = current.time.split('/'); g.font = 'bold 15px serif'; g.fillStyle = ink; g.textAlign = 'center'; g.fillText(a, 58, Y(6)); g.fillText(b, 58, Y(2)); g.textAlign = 'left'; }
   // 지금 위치
   g.strokeStyle = hot; g.lineWidth = 2; g.beginPath(); g.moveTo(playX, 8); g.lineTo(playX, h - 8); g.stroke();
+}
+
+/* ---------- 그래프 모드: 화음 음(파란 막대 + 허용 범위) 위에 내 목소리 궤적 ---------- */
+function drawPitchGraph(t, ni) {
+  const cv = $('#pgraph');
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const harm = current.harmony[S.harm];
+  const span = 7 * rate(), t0 = t - span * 0.38, t1 = t + span * 0.62, LM = 46;
+  // 보이는 음들로 세로 범위 (부드럽게 따라감)
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < TL.length; i++) {
+    if (TL[i][0] + TL[i][1] < t0 || TL[i][0] > t1) continue;
+    lo = Math.min(lo, harm[i], S.mel ? current.notes[i][2] : harm[i]); hi = Math.max(hi, harm[i], S.mel ? current.notes[i][2] : harm[i]);
+  }
+  if (isFinite(lo)) {
+    lo -= 3; hi += 3; if (hi - lo < 12) { const c = (hi + lo) / 2; lo = c - 6; hi = c + 6; }
+    P.glo = P.glo == null ? lo : P.glo + (lo - P.glo) * 0.06; P.ghi = P.ghi == null ? hi : P.ghi + (hi - P.ghi) * 0.06;
+  }
+  const L0 = P.glo ?? 50, L1 = P.ghi ?? 64;
+  const X = (x) => LM + ((x - t0) / (t1 - t0)) * (w - LM), Y = (m) => h - 8 - ((m - L0) / (L1 - L0)) * (h - 16), row = (h - 16) / (L1 - L0);
+  g.fillStyle = 'rgba(8,10,20,.72)'; g.fillRect(0, 0, w, h);
+  // 반음 격자 + 음이름
+  g.font = '11px ui-monospace, Menlo, monospace'; g.textBaseline = 'middle';
+  for (let m = Math.ceil(L0); m <= L1; m++) {
+    const y = Y(m), pc = ((m % 12) + 12) % 12, inKey = [1, 2, 4, 6, 7, 9, 11].includes(pc);   // D장조 음
+    g.strokeStyle = inKey ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.05)'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(LM, y); g.lineTo(w, y); g.stroke();
+    if (inKey && row > 9) { g.fillStyle = 'rgba(255,255,255,.55)'; g.fillText(`${NAMES[pc]}${Math.floor(m / 12) - 1}`, 4, y); }
+  }
+  const band = Math.max(3, (row * S.tol) / 100);
+  // 멜로디(참고, 회색)
+  if (S.mel) for (let i = 0; i < TL.length; i++) {
+    const [s, d] = TL[i]; if (s + d < t0 || s > t1) continue;
+    g.fillStyle = 'rgba(200,205,230,.22)'; g.fillRect(X(s), Y(current.notes[i][2]) - 2.5, Math.max(2, X(s + d) - X(s) - 1), 5);
+  }
+  // 화음 목표: 허용 범위 띠 + 중심선
+  for (let i = 0; i < TL.length; i++) {
+    const [s, d] = TL[i]; if (s + d < t0 || s > t1) continue;
+    const x0 = X(s), x1 = X(s + d) - 1, y = Y(harm[i]), on = i === ni;
+    g.fillStyle = on ? 'rgba(255,224,102,.30)' : 'rgba(90,160,255,.28)'; g.fillRect(x0, y - band, Math.max(2, x1 - x0), band * 2);
+    g.strokeStyle = on ? '#ffe066' : '#5aa0ff'; g.lineWidth = 3; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke();
+    if (noteSyl[i] && x1 - x0 > 8) { g.fillStyle = on ? '#ffe066' : 'rgba(255,255,255,.7)'; g.font = '600 13px -apple-system, "Apple SD Gothic Neo", sans-serif'; g.textBaseline = 'bottom'; g.fillText(noteSyl[i], x0, y - band - 2); g.textBaseline = 'middle'; g.font = '11px ui-monospace, Menlo, monospace'; }
+  }
+  // 내 목소리 궤적
+  const col = { ok: '#3ddc84', up: '#ff5c6c', down: '#5aa0ff', none: 'rgba(255,255,255,.75)' };
+  g.lineWidth = 4; g.lineCap = 'round';
+  let prev = null;
+  for (const p of P.trace) {
+    if (p.t < t0 - 0.5) { prev = null; continue; }
+    if (prev && p.t - prev.t < 0.15 && p.t >= prev.t) { g.strokeStyle = col[p.s]; g.beginPath(); g.moveTo(X(prev.t), Y(prev.m)); g.lineTo(X(p.t), Y(p.m)); g.stroke(); }
+    prev = p;
+  }
+  // 지금 위치 + 지금 내 음 점
+  const nowX = X(t);
+  g.strokeStyle = 'rgba(255,255,255,.6)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(nowX, 0); g.lineTo(nowX, h); g.stroke();
+  const last = P.trace[P.trace.length - 1];
+  if (last && t - 0.12 * rate() - last.t < 0.2) { g.fillStyle = col[last.s]; g.beginPath(); g.arc(nowX, Y(last.m), 7, 0, 7); g.fill(); g.strokeStyle = '#000'; g.lineWidth = 1.5; g.stroke(); }
 }
 
 function finish() {

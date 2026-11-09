@@ -46,6 +46,11 @@ header.clear { background: transparent; }
 .stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; gap: 4px; padding: 0 18px; position: relative; z-index: 1; text-align: center; }
 .arrow { font-size: min(16vw, 72px); line-height: 1; height: 1.05em; font-weight: 900; text-shadow: 0 4px 24px rgba(0,0,0,.35); }
 .hint { font-size: 15px; color: rgba(255,255,255,.8); min-height: 1.4em; }
+.pgraph { display: none; width: 100%; flex: 1; min-height: 220px; border-radius: 12px; }
+#play.graph-mode .pgraph { display: block; }
+#play.graph-mode .staff, #play.graph-mode .arrow { display: none; }
+#play.graph-mode .stage { justify-content: flex-start; padding-top: 4px; }
+button.icon.sm + button.icon.sm { margin-left: 4px; }
 .staff { width: 100%; height: 150px; display: block; margin-top: 6px; background: rgba(255,255,255,.94); border-radius: 12px; }
 .lyric { margin-top: 2px; display: flex; flex-direction: column; gap: 10px; }
 .lyric .now { font-size: clamp(24px, 7vw, 36px); font-weight: 800; line-height: 1.3; min-height: 1.3em; word-break: keep-all; }

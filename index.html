@@ -40,11 +40,12 @@
   <!-- 연습 -->
   <section class="screen" id="play">
     <div id="fb" class="fb"></div>
-    <header class="clear"><button class="icon" id="plBack" aria-label="뒤로">←</button><h2 id="plTitle"></h2><span id="plTime" class="mono"></span><button class="icon sm" id="plLyrics" aria-label="가사 고치기">가사</button></header>
+    <header class="clear"><button class="icon" id="plBack" aria-label="뒤로">←</button><h2 id="plTitle"></h2><span id="plTime" class="mono"></span><button class="icon sm" id="plView" aria-label="그래프 모드로 바꾸기">그래프</button><button class="icon sm" id="plLyrics" aria-label="가사 고치기">가사</button></header>
     <div class="stage">
       <div id="arrow" class="arrow"></div>
       <div id="hint" class="hint"></div>
       <canvas id="staff" class="staff" aria-label="악보"></canvas>
+      <canvas id="pgraph" class="pgraph" aria-label="화음 음과 내 목소리 그래프"></canvas>
       <div class="lyric">
         <div id="lyNow" class="now"></div>
         <div id="lyNext" class="next"></div>
