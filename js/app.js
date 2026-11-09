@@ -457,9 +457,23 @@ function frame() {
     (P.raw ||= []).push(sung); if (P.raw.length > 4) P.raw.shift();
     const r = P.raw.slice().sort((x, y) => x - y);
     if (P.raw.length < 3 || r[r.length - 1] - r[0] > 1.2) sung = null;
-  } else P.raw = [];
+    // ⑥ 앱이 만든 소리 구별: 화음음·멜로디음은 음높이가 '완벽하게' 고정(떨림 3센트 미만)이고 그 음과 딱 같음.
+    //    사람 목소리는 아무리 곧게 내도 미세하게 떨림 → 앱 소리와 같은 음 + 떨림 없음 = 스피커 소리로 보고 버림
+    (P.jit ||= []).push(mic.lastRaw); if (P.jit.length > 10) P.jit.shift();
+    if (sung != null && P.jit.length >= 8) {
+      const mean = P.jit.reduce((a, b) => a + b, 0) / P.jit.length;
+      const sd = Math.sqrt(P.jit.reduce((a, b) => a + (b - mean) ** 2, 0) / P.jit.length) * 100;   // 센트
+      const synth = [toneMidi, melMidi].some((o) => { if (o == null) return false; let d = mean - o; d -= 12 * Math.round(d / 12); return Math.abs(d) < 0.12; });
+      P.synthLike = synth && sd < 3;
+    } else P.synthLike = false;
+  } else { P.raw = []; P.jit = []; }
   if (sung != null) {
-    const locked = P.lock && P.lock.ni === ni && near(sung, P.lock.m);
+    const locked = P.lock && P.lock.ni === ni && Math.abs(((sung - P.lock.m + 6) % 12 + 12) % 12 - 6) < 0.8;
+    // 앱 소리처럼 완벽히 고정된 음은 음의 시작으로 인정하지 않음 (사람은 음을 낼 때 반드시 흔들림). 이미 인정된 음은 끝까지 유지
+    // 소리는 충분히 큰데 들리는 음이 앱 소리처럼 고정 → 스피커 소리가 내 목소리를 덮고 있음
+    P.drowned = !locked && P.synthLike && lvl > expect * 1.8 && P.playing;
+    if (P.drowned) P.drownedAt = performance.now();
+    if (!locked && P.synthLike) sung = null;
     // ④ 소음·스피커 소리보다 확실히 커야 목소리 (긴 음은 시작이 또렷했으면 끝까지 기준을 낮춤)
     const minLv = Math.max(0.006, expect * (locked ? 1.25 : 1.8));
     if (lvl < minLv) sung = null;
@@ -471,7 +485,7 @@ function frame() {
       if (ORIG() && ni >= 0) outs.push(current.notes[ni][2]);
       if (!locked && outs.some((o) => near(sung, o)) && lvl < expect * 2.0) sung = null;
     }
-    if (sung != null && ni >= 0 && !locked) P.lock = { ni, m: sung };   // 인정된 음은 그 음 끝까지 잠금
+    if (sung != null && ni >= 0) { if (!locked) P.lock = { ni, m: sung }; else P.lock.m += (sung - P.lock.m) * 0.3; }   // 인정된 음은 그 음 끝까지 잠금 (기준 음은 실제로 내는 음을 따라감)
   }
   const nowMs = performance.now();
   if (sung != null) { P.hist.push(sung); if (P.hist.length > 5) P.hist.shift(); P.lastVoice = nowMs; }
@@ -518,6 +532,7 @@ function frame() {
     const nx = TL.findIndex((n) => n[0] > t);
     hint.textContent = nx >= 0 && TL[nx][0] - t < 2.5 ? `${Math.ceil(TL[nx][0] - t)}…` : ORIG() ? '전주·간주' : '쉬는 구간';
   } else if (!mic) hint.textContent = `목표 ${noteLabel(target)} · 마이크 꺼짐`;
+  else if (sung == null && performance.now() - (P.drownedAt || 0) < 1500) hint.textContent = '화음음이 커서 내 목소리가 안 들려요 · 화음음을 줄이거나 이어폰을 쓰세요';
   else if (sung == null) hint.textContent = `목표 ${noteLabel(target)} · ${mic.level > 0.004 && rawSung == null ? '소리가 작거나 음이 흐려요' : '불러보세요'}`;
   else hint.textContent = `목표 ${noteLabel(tgt)} · ${cents == null ? '' : (cents > 0 ? '+' : '') + Math.round(cents) + '센트'}`;
 
@@ -716,3 +731,4 @@ renderHome();
 window.__hc = () => ({ ctx: actx && actx.state, harm: voice && voice.cur, harmGain: voice && +voice.g.gain.value.toFixed(3), mel: melVoice && melVoice.cur, melGain: melVoice && +melVoice.g.gain.value.toFixed(3), vol: S.vol, melVol: S.melVol });
 window.__seek = (t) => { if (ORIG()) origEl.currentTime = t; else { P.t = t; P.baseT = t; P.base = performance.now(); } };
 window.__leak = () => ({ noise: P.noise, leakPerAmp: P.leakPerAmp });
+

@@ -68,6 +68,7 @@ export class MicPitch {
     const den = a - 2 * b + c;
     const tt = tau + (den ? (0.5 * (a - c)) / den : 0);
     const m = freqToMidi(this.fs / tt);
+    this.lastRaw = m;   // 다듬지 않은 값 (떨림 측정용)
     this.hist.push(m);
     if (this.hist.length > 3) this.hist.shift();
     const s = this.hist.slice().sort((p, q) => p - q);
