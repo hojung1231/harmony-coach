@@ -203,10 +203,124 @@ function analyze(L, R, sr, progress) {
   return { midi, sal: salOut, hop: HOP / fs, offset: N / 2 / fs };
 }
 
+/* ---------- 옥타브 오류 보정: 주변 3초 멜로디 흐름에서 7반음 넘게 벗어난 프레임을 옥타브 이동 ---------- */
+function octaveFix(midi, sal, hop, voicedOnly) {
+  const n = midi.length, half = Math.round(1.5 / hop), step = Math.max(1, Math.round(0.1 / hop));
+  for (let pass = 0; pass < 2; pass++) {
+    const traj = new Float32Array(n);
+    for (let c = 0; c < n; c += step) {
+      const v = [];
+      for (let j = Math.max(0, c - half); j < Math.min(n, c + half); j += 2) if (sal[j] > 0 && (!voicedOnly || sal[j] > 0.05)) v.push(midi[j]);
+      v.sort((a, b) => a - b);
+      const m = v.length ? v[v.length >> 1] : NaN;
+      for (let j = c; j < Math.min(n, c + step); j++) traj[j] = m;
+    }
+    for (let i = 0; i < n; i++) {
+      if (!(sal[i] > 0) || isNaN(traj[i])) continue;
+      while (midi[i] - traj[i] > 7.5) midi[i] -= 12;
+      while (midi[i] - traj[i] < -7.5) midi[i] += 12;
+    }
+  }
+}
+
+/* ---------- 보컬 전용(분리된 목소리 파일) 정밀 분석: pYIN 방식 ---------- */
+function analyzeVocal(L, R, sr, progress) {
+  const FSV = 11025, W = 512, HOPV = 128, NF = 1024;
+  // 모노 + 2단계 다운샘플
+  const mono = new Float32Array(L.length);
+  for (let i = 0; i < L.length; i++) mono[i] = R ? (L[i] + R[i]) / 2 : L[i];
+  const f = sr / FSV, n = Math.floor(mono.length / f), x = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = Math.floor(i * f), b = Math.max(a + 1, Math.floor((i + 1) * f));
+    let s = 0; for (let j = a; j < b; j++) s += mono[j]; x[i] = s / (b - a);
+  }
+  const nFrames = Math.max(1, Math.floor((n - 2 * W) / HOPV) + 1);
+  const tauMin = Math.floor(FSV / 1100), tauMax = Math.ceil(FSV / 65);
+  const fft = makeFFT(NF);
+  const ar = new Float64Array(NF), ai = new Float64Array(NF), br = new Float64Array(NF), bi = new Float64Array(NF);
+  const d = new Float64Array(tauMax + 2), sq = new Float64Array(2 * W + 1);
+  const KC = 4;
+  const cMidi = new Float32Array(nFrames * KC), cP = new Float32Array(nFrames * KC), rms = new Float32Array(nFrames);
+  // pYIN 문턱값 분포 (베타분포 근사, 0.1~0.15 근처에 집중)
+  const TH = [], TW = [];
+  for (let t = 0.025; t <= 0.5; t += 0.025) { TH.push(t); TW.push(Math.pow(t, 1) * Math.pow(1 - t, 9)); }
+  const tws = TW.reduce((a, b) => a + b, 0); for (let i = 0; i < TW.length; i++) TW[i] /= tws;
+  let maxRms = 0;
+  for (let fr = 0; fr < nFrames; fr++) {
+    const o = fr * HOPV;
+    for (let i = 0; i < NF; i++) { ar[i] = i < W ? x[o + i] : 0; ai[i] = 0; br[i] = x[o + i] || 0; bi[i] = 0; }
+    sq[0] = 0; for (let i = 0; i < 2 * W; i++) sq[i + 1] = sq[i] + br[i] * br[i];
+    rms[fr] = Math.sqrt(sq[W] / W); if (rms[fr] > maxRms) maxRms = rms[fr];
+    fft(ar, ai); fft(br, bi);
+    // 교차상관: conj(A)·B 의 역FFT
+    for (let k = 0; k < NF; k++) { const r0 = ar[k] * br[k] + ai[k] * bi[k], i0 = ar[k] * bi[k] - ai[k] * br[k]; ar[k] = r0; ai[k] = -i0; }
+    fft(ar, ai); // 역변환 = conj 후 FFT
+    let run = 0; d[0] = 1;
+    for (let t = 1; t <= tauMax + 1; t++) {
+      const c = ar[t] / NF;
+      const dt = sq[W] + (sq[t + W] - sq[t]) - 2 * c;
+      run += dt; d[t] = run > 0 ? (dt * t) / run : 1;
+    }
+    // 문턱값별 첫 번째 골짜기에 확률 배분
+    const cand = new Map();
+    for (let h = 0; h < TH.length; h++) {
+      for (let t = tauMin; t < tauMax; t++) {
+        if (d[t] < TH[h] && d[t] <= d[t - 1] && d[t] <= d[t + 1]) { cand.set(t, (cand.get(t) || 0) + TW[h]); break; }
+      }
+    }
+    const list = [...cand.entries()].sort((a, b) => b[1] - a[1]).slice(0, KC);
+    for (let k = 0; k < KC; k++) {
+      if (k < list.length) {
+        const t = list[k][0], a = d[t - 1], b = d[t], c = d[t + 1], den = a - 2 * b + c;
+        const tt = t + (den ? (0.5 * (a - c)) / den : 0);
+        cMidi[fr * KC + k] = 69 + 12 * Math.log2(FSV / tt / 440); cP[fr * KC + k] = list[k][1];
+      } else { cMidi[fr * KC + k] = 0; cP[fr * KC + k] = 0; }
+    }
+    if (fr % 500 === 0) progress(0.85 * fr / nFrames);
+  }
+  // 에너지가 너무 작으면 무성
+  const gate = maxRms * 0.012;
+  for (let fr = 0; fr < nFrames; fr++) if (rms[fr] < gate) for (let k = 0; k < KC; k++) cP[fr * KC + k] = 0;
+  // HMM 비터비: 상태 0..KC-1 = 후보 음, KC = 무성
+  const S = KC + 1, back = new Uint8Array(nFrames * S);
+  let prev = new Float64Array(S), cur = new Float64Array(S);
+  const em = (fr, k) => {
+    if (k === KC) { let p = 0; for (let j = 0; j < KC; j++) p += cP[fr * KC + j]; return -Math.log(Math.max(1e-4, 1 - p * 0.9)); }
+    return cP[fr * KC + k] > 0 ? -Math.log(cP[fr * KC + k] * 0.9 + 1e-4) : 50;
+  };
+  const LAM = 0.35, SW = 2.5;
+  for (let k = 0; k < S; k++) prev[k] = em(0, k);
+  for (let fr = 1; fr < nFrames; fr++) {
+    for (let k = 0; k < S; k++) {
+      let best = Infinity, bj = 0;
+      for (let j = 0; j < S; j++) {
+        let c = prev[j];
+        if (k === KC || j === KC) c += k === j ? 0 : SW;
+        else c += LAM * Math.abs(cMidi[fr * KC + k] - cMidi[(fr - 1) * KC + j]);
+        if (c < best) { best = c; bj = j; }
+      }
+      cur[k] = best + em(fr, k); back[fr * S + k] = bj;
+    }
+    [prev, cur] = [cur, prev];
+  }
+  let bk = 0; for (let k = 1; k < S; k++) if (prev[k] < prev[bk]) bk = k;
+  const midi = new Float32Array(nFrames), sal = new Float32Array(nFrames);
+  for (let fr = nFrames - 1; fr >= 0; fr--) {
+    if (bk < KC) { midi[fr] = cMidi[fr * KC + bk]; sal[fr] = Math.max(0.06, cP[fr * KC + bk]); }
+    bk = back[fr * S + bk];
+  }
+  // 무성 프레임 음높이는 이전 값 유지 (그래프용)
+  for (let i = 1; i < nFrames; i++) if (!sal[i]) midi[i] = midi[i - 1];
+  octaveFix(midi, sal, HOPV / FSV, true);
+  progress(1);
+  return { midi, sal, hop: HOPV / FSV, offset: W / 2 / FSV, voicing: true };
+}
+
 self.onmessage = (e) => {
-  const { left, right, sampleRate } = e.data;
+  const { left, right, sampleRate, mode } = e.data;
   try {
-    const res = analyze(left, right, sampleRate, (p) => self.postMessage({ type: 'progress', p }));
+    const prog = (p) => self.postMessage({ type: 'progress', p });
+    const res = mode === 'vocal' ? analyzeVocal(left, right, sampleRate, prog) : analyze(left, right, sampleRate, prog);
     self.postMessage({ type: 'done', contour: res }, [res.midi.buffer, res.sal.buffer]);
   } catch (err) {
     self.postMessage({ type: 'error', message: String(err && err.message || err) });

@@ -30,7 +30,8 @@ function quantile(arr, q) {
 export function segmentNotes(contour, sensitivity = 0.5) {
   const { midi, sal, hop, offset } = contour;
   const n = midi.length;
-  const thr = quantile(sal, 0.6 - 0.5 * sensitivity);
+  // 보컬 파일 분석은 유/무성 판단이 이미 되어 있음 → 낮은 절대 문턱값
+  const thr = contour.voicing ? 0.02 + 0.25 * (1 - sensitivity) : quantile(sal, 0.6 - 0.5 * sensitivity);
   const voiced = new Uint8Array(n);
   for (let i = 0; i < n; i++) voiced[i] = sal[i] > thr && sal[i] > 0.01 ? 1 : 0;
 
