@@ -88,8 +88,8 @@ export class Voice {
       ctx._master = master;
     }
     this.osc = ctx.createOscillator();
-    this.osc.type = type === 'sine' ? 'triangle' : 'sawtooth';   // 배음이 있어야 폰 스피커로도 들림
-    this.lp = ctx.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.frequency.value = type === 'sine' ? 1400 : 2600;
+    this.osc.type = type === 'sine' ? 'square' : 'sawtooth';   // 배음이 있어야 폰 스피커로도 들림 (멜로디=사각파, 화음=톱니파)
+    this.lp = ctx.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.frequency.value = type === 'sine' ? 2000 : 2600;
     this.g = ctx.createGain();
     this.g.gain.value = 0;
     this.osc.connect(this.lp).connect(this.g).connect(ctx._master);

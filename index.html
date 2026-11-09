@@ -61,6 +61,7 @@
         <button data-r="1">1배</button><button data-r="0.8">0.8배</button><button data-r="0.6">0.6배</button><button data-r="0.5">0.5배</button>
       </div>
       <div class="row">
+        <button class="round txt off" id="plOrig" aria-label="원곡 켜기/끄기">원곡+</button>
         <button class="round" id="plMel" aria-label="멜로디음 켜기/끄기">🎵</button>
         <button class="round" id="plRestart" aria-label="처음부터">⏮</button>
         <button class="round big" id="plPlay" aria-label="재생">▶</button>
@@ -95,12 +96,15 @@
       <label class="field">화음음 크기 <input type="range" id="setVol" min="0.05" max="0.6" step="0.05" /></label>
       <label class="field">멜로디음 크기 <input type="range" id="setMelVol" min="0.05" max="0.5" step="0.05" /></label>
       <p class="small muted">느리게 연습해도 화음음·멜로디음은 앱이 직접 만드는 소리라 음정이 그대로예요. 박자만 느려져요.</p>
+      <button id="origClear">연결한 원곡 파일 지우기</button>
+      <p class="small muted">원곡은 연습 화면의 '원곡+' 버튼으로 폰에 있는 음원 파일을 한 번 연결하면 1배속에서 함께 나와요. 파일은 이 폰에만 저장돼요.</p>
       <hr />
       <div class="row"><span class="muted">버전 <b id="appVer"></b></span><span class="spacer"></span><button id="updateCheck">업데이트 확인</button></div>
       <p class="small muted">🎧 이어폰을 끼세요. 스피커로 들으면 마이크가 화음음을 내 목소리로 착각할 수 있어요.</p>
     </div>
   </section>
 
+  <input type="file" id="origFile" accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg,.flac" hidden />
   <div id="toast" class="toast"></div>
   <script type="module" src="js/app.js"></script>
 </body>
