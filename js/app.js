@@ -271,9 +271,7 @@ origEl.addEventListener('ended', () => { if (P.playing && ORIG()) finish(); });
 $('#plBack').onclick = () => show('home');
 document.querySelectorAll('#harmSeg button').forEach((b) => b.onclick = () => { S.harm = b.dataset.h; save(); syncButtons(); });
 function syncButtons() {
-  $('#plTone').classList.toggle('off', !S.tone);
-  $('#plMel').classList.toggle('off', !S.mel);
-  $('#plOrig').classList.toggle('off', !ORIG());
+  for (const [id, on] of [['#plTone', S.tone], ['#plMel', S.mel], ['#plOrig', ORIG()]]) { $(id).classList.toggle('off', !on); $(id).setAttribute('aria-pressed', on); }
   $('#plOrig').textContent = origUrl ? '원곡' : '원곡+';
   document.querySelectorAll('#speedSeg button').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.r === (S.speed || 1)));
   document.querySelectorAll('#harmSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.h === S.harm));
@@ -400,7 +398,7 @@ function drawStaff(t, ni) {
   if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, w, h);
-  const gap = 13, bottom = h - 64, LX = 44, playX = Math.max(90, w * 0.3), px = 30;   // 8분음표 하나 = 30px
+  const gap = 12, bottom = h - 54, LX = 44, playX = Math.max(90, w * 0.3), px = 30;   // 8분음표 하나 = 30px
   const curE = eighthAt(t);
   const X = (e) => playX + (e - curE) * px;
   const Y = (step) => bottom - step * (gap / 2);

@@ -61,11 +61,13 @@
         <button data-r="1">1배</button><button data-r="0.8">0.8배</button><button data-r="0.6">0.6배</button><button data-r="0.5">0.5배</button>
       </div>
       <div class="row">
-        <button class="round txt off" id="plOrig" aria-label="원곡 켜기/끄기">원곡+</button>
-        <button class="round" id="plMel" aria-label="멜로디음 켜기/끄기">🎵</button>
+        <button class="tg" id="plTone" aria-pressed="true">화음음</button>
+        <button class="tg" id="plMel" aria-pressed="true">멜로디음</button>
+        <button class="tg off" id="plOrig" aria-pressed="false">원곡+</button>
+      </div>
+      <div class="row">
         <button class="round" id="plRestart" aria-label="처음부터">⏮</button>
         <button class="round big" id="plPlay" aria-label="재생">▶</button>
-        <button class="round" id="plTone" aria-label="화음음 켜기/끄기">🔊</button>
       </div>
     </div>
   </section>
