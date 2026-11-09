@@ -56,7 +56,11 @@
         <button data-h="third_down" aria-pressed="false">3도 아래</button>
         <button data-h="sixth_down" aria-pressed="false">6도 아래</button>
       </div>
+      <div class="seg" id="speedSeg">
+        <button data-r="1">1배</button><button data-r="0.8">0.8배</button><button data-r="0.6">0.6배</button><button data-r="0.5">0.5배</button>
+      </div>
       <div class="row">
+        <button class="round" id="plMel" aria-label="멜로디음 켜기/끄기">🎵</button>
         <button class="round" id="plRestart" aria-label="처음부터">⏮</button>
         <button class="round big" id="plPlay" aria-label="재생">▶</button>
         <button class="round" id="plTone" aria-label="화음음 켜기/끄기">🔊</button>
@@ -86,7 +90,8 @@
       </div>
       <label class="chk"><input type="checkbox" id="setOct" />옥타브 달라도 인정</label>
       <label class="field">화음음 크기 <input type="range" id="setVol" min="0.02" max="0.4" step="0.02" /></label>
-      <label class="chk"><input type="checkbox" id="setSlow" />천천히 (0.8배속)</label>
+      <label class="field">멜로디음 크기 <input type="range" id="setMelVol" min="0.02" max="0.3" step="0.02" /></label>
+      <p class="small muted">느리게 연습해도 화음음·멜로디음은 앱이 직접 만드는 소리라 음정이 그대로예요. 박자만 느려져요.</p>
       <hr />
       <div class="row"><span class="muted">버전 <b id="appVer"></b></span><span class="spacer"></span><button id="updateCheck">업데이트 확인</button></div>
       <p class="small muted">🎧 이어폰을 끼세요. 스피커로 들으면 마이크가 화음음을 내 목소리로 착각할 수 있어요.</p>

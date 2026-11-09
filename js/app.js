@@ -11,7 +11,7 @@ const noteLabel = (m) => `${NAMES[pcOf(m)]}${Math.floor(Math.round(m) / 12) - 1}
 const fmt = (t) => `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, '0')}`;
 
 /* ---------- 설정 ---------- */
-const DEF = { tol: 50, octaveFree: true, vol: 0.14, slow: false, harm: 'third_up', tone: true };
+const DEF = { tol: 50, octaveFree: true, vol: 0.14, melVol: 0.08, speed: 1, mel: false, harm: 'third_up', tone: true };
 let S = { ...DEF };
 try { S = { ...DEF, ...JSON.parse(localStorage.getItem('hc2') || '{}') }; } catch {}
 const save = () => { try { localStorage.setItem('hc2', JSON.stringify(S)); } catch {} };
@@ -138,15 +138,15 @@ $('#lySave').onclick = async () => {
 };
 
 /* ---------- 연습 ---------- */
-let actx, voice, mic;
+let actx, voice, melVoice, mic;
 const P = { t: 0, playing: false, base: 0, baseT: 0, hist: [], state: 'none', pend: 'none', pendN: 0, hit: 0, tot: 0, end: 0 };
 
 function getCtx() {
-  if (!actx) { actx = new (window.AudioContext || window.webkitAudioContext)(); voice = new Voice(actx, 'triangle'); }
+  if (!actx) { actx = new (window.AudioContext || window.webkitAudioContext)(); voice = new Voice(actx, 'triangle'); melVoice = new Voice(actx, 'sine'); }
   if (actx.state === 'suspended') actx.resume();
   return actx;
 }
-function rate() { return S.slow ? 0.8 : 1; }
+function rate() { return S.speed || 1; }
 function now() { return P.playing ? P.baseT + ((performance.now() - P.base) / 1000) * rate() : P.t; }
 
 function startPlay(text) {
@@ -163,6 +163,7 @@ function startPlay(text) {
 function stopPlay() {
   P.playing = false;
   if (voice) voice.off();
+  if (melVoice) melVoice.off();
   if (mic) { mic.stop(); mic = null; }
 }
 async function togglePlay() {
@@ -171,7 +172,7 @@ async function togglePlay() {
     try { mic = new MicPitch(); await mic.start(actx, { aec: true }); }
     catch (err) { mic = null; toast('마이크를 허용해 주세요', 3000); }
   }
-  if (P.playing) { P.t = now(); P.playing = false; voice.off(); $('#plPlay').textContent = '▶'; }
+  if (P.playing) { P.t = now(); P.playing = false; voice.off(); melVoice.off(); $('#plPlay').textContent = '▶'; }
   else {
     if (P.t >= P.end) { P.t = 0; P.hit = 0; P.tot = 0; }
     P.baseT = P.t; P.base = performance.now(); P.playing = true; $('#plPlay').textContent = '⏸';
@@ -179,11 +180,19 @@ async function togglePlay() {
 }
 $('#plPlay').onclick = togglePlay;
 $('#plRestart').onclick = () => { P.t = 0; P.baseT = 0; P.base = performance.now(); P.hit = 0; P.tot = 0; };
-$('#plTone').onclick = () => { S.tone = !S.tone; save(); syncButtons(); };
+$('#plTone').onclick = () => { S.tone = !S.tone; save(); syncButtons(); toast(S.tone ? '화음음 켬' : '화음음 끔', 900); };
+$('#plMel').onclick = () => { S.mel = !S.mel; save(); syncButtons(); toast(S.mel ? '멜로디음 켬' : '멜로디음 끔', 900); };
+document.querySelectorAll('#speedSeg button').forEach((b) => b.onclick = () => {
+  const t = now(); S.speed = +b.dataset.r; save();
+  P.t = t; P.baseT = t; P.base = performance.now();   // 속도를 바꿔도 지금 위치 유지
+  syncButtons();
+});
 $('#plBack').onclick = () => show('home');
 document.querySelectorAll('#harmSeg button').forEach((b) => b.onclick = () => { S.harm = b.dataset.h; save(); syncButtons(); });
 function syncButtons() {
   $('#plTone').classList.toggle('off', !S.tone);
+  $('#plMel').classList.toggle('off', !S.mel);
+  document.querySelectorAll('#speedSeg button').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.r === (S.speed || 1)));
   document.querySelectorAll('#harmSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.h === S.harm));
 }
 
@@ -239,6 +248,7 @@ function frame() {
 
   // 화음음
   if (voice) voice.set(P.playing && S.tone && target != null ? target : null, S.vol);
+  if (melVoice) melVoice.set(P.playing && S.mel && ni >= 0 ? current.notes[ni][2] : null, S.melVol);
 
   // 내 목소리 (반응 시간 0.12초 감안)
   const sung = mic ? mic.read() : null;
@@ -270,7 +280,7 @@ function frame() {
   else hint.textContent = `목표 ${noteLabel(tgt)} · ${cents == null ? '' : (cents > 0 ? '+' : '') + Math.round(cents) + '센트'}`;
 
   renderLyrics(t, ni);
-  $('#plTime').textContent = `${fmt(t)} / ${fmt(P.end)}`;
+  $('#plTime').textContent = `${fmt(t / rate())} / ${fmt(P.end / rate())}${rate() !== 1 ? ' · ' + rate() + '배' : ''}`;
   $('#prog').style.width = `${Math.min(100, (t / P.end) * 100)}%`;
   raf = requestAnimationFrame(frame);
 }
@@ -279,7 +289,7 @@ function finish() {
   P.playing = false; P.t = P.end; stopPlay(); setState('none');
   const pct = P.tot ? Math.round((100 * P.hit) / P.tot) : 0;
   $('#rsScore').textContent = pct;
-  $('#rsText').textContent = `화음을 불러야 하는 시간 중 ${pct}%를 초록색(허용 오차 ±${S.tol}센트)으로 맞췄어요.`;
+  $('#rsText').textContent = `화음을 불러야 하는 시간 중 ${pct}%를 초록색(허용 오차 ±${S.tol}센트${rate() !== 1 ? ', ' + rate() + '배속' : ''})으로 맞췄어요.`;
   show('result');
 }
 $('#rsAgain').onclick = () => openSong(current);
@@ -287,13 +297,13 @@ $('#rsAgain').onclick = () => openSong(current);
 /* ---------- 설정 ---------- */
 function renderSettings() {
   document.querySelectorAll('#tolSeg button').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.t === S.tol));
-  $('#setOct').checked = S.octaveFree; $('#setVol').value = S.vol; $('#setSlow').checked = S.slow;
+  $('#setOct').checked = S.octaveFree; $('#setVol').value = S.vol; $('#setMelVol').value = S.melVol;
   $('#appVer').textContent = APP_VERSION;
 }
 document.querySelectorAll('#tolSeg button').forEach((b) => b.onclick = () => { S.tol = +b.dataset.t; save(); renderSettings(); });
 $('#setOct').onchange = (e) => { S.octaveFree = e.target.checked; save(); };
 $('#setVol').onchange = (e) => { S.vol = +e.target.value; save(); };
-$('#setSlow').onchange = (e) => { S.slow = e.target.checked; save(); };
+$('#setMelVol').onchange = (e) => { S.melVol = +e.target.value; save(); };
 
 /* ---------- 업데이트 ---------- */
 async function doUpdate(btn) {
