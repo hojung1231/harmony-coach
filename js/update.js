@@ -1,8 +1,8 @@
 // 앱 업데이트 확인 / 적용
-export const APP_VERSION = '1.2.1';
+export const APP_VERSION = '2.0.0';
 
-const ASSETS = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/music.js', 'js/pitch.js', 'js/graph.js',
-  'js/db.js', 'js/update.js', 'js/analyzer-worker.js', 'manifest.webmanifest', 'sw.js'];
+const ASSETS = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/pitch.js', 'js/db.js', 'js/update.js',
+  'songs/sooknyeo.json', 'manifest.webmanifest', 'sw.js'];
 
 const newer = (a, b) => {
   const x = a.split('.').map(Number), y = b.split('.').map(Number);

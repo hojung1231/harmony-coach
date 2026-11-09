@@ -1,5 +1,5 @@
 // 실시간 마이크 음높이 감지 (YIN 알고리즘)
-import { freqToMidi } from './music.js';
+const freqToMidi = (f) => 69 + 12 * Math.log2(f / 440);
 
 export class MicPitch {
   async start(ctx, { aec = true } = {}) {

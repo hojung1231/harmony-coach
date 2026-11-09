@@ -13,225 +13,87 @@
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <!-- 홈: 내 노래 목록 -->
+  <!-- 홈: 곡 목록 -->
   <section class="screen active" id="home">
     <header><h1>🎤 화음 코치</h1><button class="icon" data-go="settings" aria-label="설정">⚙️</button></header>
     <div class="content">
       <div id="updateBanner" class="banner hidden">
-        <span>✨ 새 버전 <b id="updateVer"></b>이 있어요</span>
+        <span>새 버전 <b id="updateVer"></b></span>
         <button class="primary" id="updateNow">업데이트</button>
       </div>
-      <a id="apkBanner" class="banner hidden" href="https://github.com/hojung1231/harmony-coach/releases/download/android/harmony-coach.apk">
-        <span>📱 안드로이드 앱으로 설치하기</span><span class="primary pill">APK 다운로드</span>
-      </a>
-      <div class="row">
-        <button class="primary big" data-pick>＋ 음악 가져오기</button>
-        <button class="big" data-go="guide">🛒 음원 구하기</button>
-      </div>
-      <h3>내 노래 <span class="muted small" id="songCount"></span></h3>
       <div id="songList" class="list"></div>
-      <div id="emptyMsg" class="card center">
-        <p><b>아직 노래가 없어요</b></p>
-        <p class="muted">① <b>음원 구하기</b>에서 노래를 사서 다운받고<br>② <b>음악 가져오기</b>로 받은 파일을 고르면<br>여기에 노래 목록이 생겨요.</p>
-        <button class="primary" data-go="guide">음원 구하는 법 보기</button>
-      </div>
-      <p class="muted small center">노래를 누르면 바로 재생하면서 화음 연습을 시작해요.</p>
+      <label class="add">＋ 곡 파일 추가<input type="file" id="songFile" accept=".json,application/json" hidden /></label>
     </div>
   </section>
 
-  <!-- 음원 구하는 법 -->
-  <section class="screen" id="guide">
-    <header><button class="icon" data-go="home">←</button><h2>음원 구하는 법</h2></header>
+  <!-- 가사 넣기 (처음 한 번) -->
+  <section class="screen" id="lyrics">
+    <header><button class="icon" data-go="home" aria-label="뒤로">←</button><h2 id="lyTitle">가사</h2></header>
     <div class="content">
-      <div class="card">
-        <h3>🔎 노래 찾아서 사기</h3>
-        <input id="buyQuery" placeholder="노래 제목이나 가수 (예: 좋은 날 아이유)" />
-        <div class="grid3">
-          <button data-store="melon">멜론</button>
-          <button data-store="genie">지니</button>
-          <button data-store="bugs">벅스</button>
-        </div>
-        <p class="muted small">누르면 그 음원 사이트의 검색 결과가 열려요. 로그인 후 <b>MP3 다운로드</b>(곡 구매 또는 다운로드 이용권, 유료)로 받으세요.</p>
+      <p class="muted">가사는 저작권 때문에 앱에 들어 있지 않아요. 한 번만 붙여넣으면 이 폰에만 저장돼요.</p>
+      <textarea id="lyText" placeholder="가사를 붙여넣으세요 (멜론·지니 가사 그대로)"></textarea>
+      <p id="lyCheck" class="small muted"></p>
+      <button class="primary big" id="lySave">저장하고 시작</button>
+    </div>
+  </section>
+
+  <!-- 연습 -->
+  <section class="screen" id="play">
+    <div id="fb" class="fb"></div>
+    <header class="clear"><button class="icon" id="plBack" aria-label="뒤로">←</button><h2 id="plTitle"></h2><span id="plTime" class="mono"></span></header>
+    <div class="stage">
+      <div id="arrow" class="arrow"></div>
+      <div id="hint" class="hint"></div>
+      <div class="lyric">
+        <div id="lyNow" class="now"></div>
+        <div id="lyNext" class="next"></div>
       </div>
-      <div class="card">
-        <h3>📥 다운받은 다음에는</h3>
-        <ol class="steps">
-          <li>받은 파일은 보통 폰의 <b>다운로드</b> 폴더(또는 Music 폴더)에 저장돼요.</li>
-          <li>화음 코치로 돌아와 <b>음악 가져오기</b>를 누르고 받은 파일을 골라요. 여러 곡을 한 번에 골라도 돼요.</li>
-          <li><b>내 노래</b> 목록에 생긴 노래를 누르면 재생과 함께 화음 연습이 시작돼요.</li>
-        </ol>
-        <p class="muted small">안드로이드: 파일 앱이나 음원 앱에서 곡을 <b>공유 → 화음 코치</b>로 보내도 목록에 추가돼요. (홈 화면에 앱을 설치한 경우)</p>
-        <button class="primary" data-pick>받은 음악 가져오기</button>
+    </div>
+    <div class="bar"><div id="prog"></div></div>
+    <div class="controls">
+      <div class="seg" id="harmSeg">
+        <button data-h="third_up" aria-pressed="true">3도 위</button>
+        <button data-h="third_down" aria-pressed="false">3도 아래</button>
+        <button data-h="sixth_down" aria-pressed="false">6도 아래</button>
       </div>
-      <div class="card warn">
-        <h3>⚠️ 이런 파일은 안 돼요</h3>
-        <ul class="steps">
-          <li><b>유튜브 프리미엄 오프라인 저장</b>, 스트리밍 이용권의 <b>'저장/캐시'</b> 곡은 그 앱 안에서만 재생되게 잠겨 있어서(DRM) 가져올 수 없어요.</li>
-          <li>살 때 상품 설명에 <b>MP3 다운로드</b>(파일로 소장)라고 되어 있는지 확인하세요. 가격과 조건은 서비스마다 다르고 바뀔 수 있어요.</li>
-        </ul>
-      </div>
-      <div class="card">
-        <h3>🍎 아이폰이라면</h3>
-        <p class="muted">사파리로 음원 사이트에서 MP3를 받으면 <b>파일 앱 → 다운로드</b>에 저장돼요. 음악 가져오기에서 <b>'파일 선택'</b>으로 그 파일을 고르세요. 애플 뮤직이나 아이튠즈로 산 곡은 파일로 꺼내기 어려워요.</p>
-      </div>
-      <div class="card">
-        <h3>🆓 무료로 하는 방법</h3>
-        <p class="muted">이미 가진 음원 파일(PC에서 옮기기, 카톡 '나와의 채팅'으로 보내서 저장 등)을 쓰거나, 다른 기기에서 유튜브로 노래를 틀고 이 폰으로 <b>녹음</b>할 수 있어요.</p>
-        <button data-go="import">🎙 녹음으로 추가하기</button>
+      <div class="row">
+        <button class="round" id="plRestart" aria-label="처음부터">⏮</button>
+        <button class="round big" id="plPlay" aria-label="재생">▶</button>
+        <button class="round" id="plTone" aria-label="화음음 켜기/끄기">🔊</button>
       </div>
     </div>
   </section>
 
-  <!-- 녹음으로 추가 -->
-  <section class="screen" id="import">
-    <header><button class="icon" data-go="home">←</button><h2>녹음으로 추가</h2></header>
-    <div class="content">
-      <div class="card">
-        <p class="muted">다른 기기(PC·태블릿·스피커)에서 유튜브 등으로 노래를 틀고, 이 폰을 가까이 두고 녹음하세요. 조용한 곳에서 녹음할수록 멜로디가 정확하게 나와요.</p>
-        <label class="field">노래 이름 <input id="songName" placeholder="예) 좋은 날 - 아이유" /></label>
-        <div class="row">
-          <button id="recBtn" class="primary">● 녹음 시작</button>
-          <span id="recTime" class="mono">0:00</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 분석 중 -->
-  <section class="screen" id="analyze">
-    <header><h2>멜로디 따는 중…</h2></header>
+  <!-- 결과 -->
+  <section class="screen" id="result">
+    <header><button class="icon" data-go="home" aria-label="뒤로">←</button><h2>결과</h2></header>
     <div class="content center">
-      <p id="anaStage" class="muted">음원 불러오는 중</p>
-      <div class="progress"><div id="anaBar"></div></div>
-      <p class="muted small">원곡의 보컬 멜로디를 분석하고 있어요. 4분 노래 기준 수십 초 정도 걸려요.</p>
-    </div>
-  </section>
-
-  <!-- 곡 설정 / 멜로디 확인 -->
-  <section class="screen" id="editor">
-    <header><button class="icon" data-go="home">←</button><h2 id="edTitle">곡 설정</h2></header>
-    <div class="content">
-      <div class="grid2">
-        <label class="field">조(Key) <select id="edKey"></select></label>
-        <label class="field">화음 종류 <select id="edHarm"></select></label>
-        <label class="field">화음 옥타브 <select id="edOct">
-          <option value="-2">2옥타브 아래</option><option value="-1">1옥타브 아래</option>
-          <option value="0" selected>그대로</option><option value="1">1옥타브 위</option></select></label>
-        <label class="field">멜로디 감도 <input type="range" id="edSens" min="0" max="1" step="0.05" /></label>
-      </div>
-      <p class="legend"><span class="sw mel"></span>원곡 멜로디 <span class="sw harm"></span>내가 부를 화음</p>
-      <canvas id="edCanvas" class="graph tall"></canvas>
-      <div class="row wrap">
-        <button id="edPlay">▶ 미리듣기</button>
-        <label class="chk"><input type="checkbox" id="edMelTone" checked />멜로디음</label>
-        <label class="chk"><input type="checkbox" id="edHarmTone" />화음음</label>
-        <span class="spacer"></span>
-        <button id="edZoomOut">－</button><button id="edZoomIn">＋</button>
-      </div>
-      <div id="edNoteBar" class="row wrap hidden">
-        <span id="edNoteInfo" class="mono"></span>
-        <button data-ed="-1">반음↓</button><button data-ed="1">반음↑</button>
-        <button data-ed="-12">옥타브↓</button><button data-ed="12">옥타브↑</button>
-        <button data-ed="del" class="danger">삭제</button>
-      </div>
-      <p class="muted small">그래프를 좌우로 끌어서 이동, 회색 멜로디 막대를 눌러 틀린 음을 고칠 수 있어요.</p>
-      <div class="row">
-        <button class="primary big" id="edStart">▶ 재생하며 화음 연습</button>
-      </div>
-      <div class="row">
-        <button class="big" id="edStep">🎯 원곡 없이 한 음씩 연습</button>
-      </div>
-      <button class="danger small-btn" id="edDelete">이 노래 삭제</button>
-    </div>
-  </section>
-
-  <!-- 실시간 연습 -->
-  <section class="screen" id="practice">
-    <header><button class="icon" id="prBack">←</button><h2 id="prTitle">연습</h2><span id="prTime" class="mono"></span></header>
-    <div class="content tight">
-      <div id="prReadout" class="readout"><span id="prTarget">목표 -</span><span id="prSung">내 음 -</span></div>
-      <canvas id="prCanvas" class="graph full"></canvas>
-      <p class="legend small"><span class="sw harm"></span>목표 화음 <span class="sw good"></span>정확 <span class="sw warn"></span>조금 벗어남 <span class="sw bad"></span>많이 벗어남</p>
-      <div class="row wrap">
-        <button id="prPlay" class="primary">▶ 시작</button>
-        <button id="prRestart">⟲ 처음</button>
-        <select id="prSpeed"><option value="1">1.0x</option><option value="0.9">0.9x</option><option value="0.75">0.75x</option><option value="0.6">0.6x</option><option value="0.5">0.5x</option></select>
-        <button id="prFinish">끝내고 리뷰</button>
-      </div>
-      <div class="row wrap">
-        <label class="chk"><input type="checkbox" id="prOrig" checked />원곡 소리</label>
-        <label class="chk"><input type="checkbox" id="prMel" />멜로디음</label>
-        <label class="chk"><input type="checkbox" id="prGuide" />화음 가이드음</label>
-        <label class="chk" id="prLoopWrap"><input type="checkbox" id="prLoop" checked />구간 반복</label>
-      </div>
-      <p class="muted small">🎧 이어폰을 꼭 끼세요. 스피커로 들으면 마이크가 원곡 목소리를 같이 잡아요.</p>
-    </div>
-  </section>
-
-  <!-- 리뷰 -->
-  <section class="screen" id="review">
-    <header><button class="icon" data-go="editor">←</button><h2>리뷰</h2></header>
-    <div class="content">
-      <div class="score"><span id="rvScore">0</span><small>점</small></div>
-      <p id="rvSummary" class="center muted"></p>
-      <h3>구간별 결과 <span class="muted small">(눌러서 자세히)</span></h3>
-      <div id="rvStrip" class="strip"></div>
-      <canvas id="rvCanvas" class="graph tall"></canvas>
-      <p id="rvDetail" class="detail muted">구간을 선택하세요.</p>
-      <div class="row wrap">
-        <button class="primary" id="rvPractice">이 구간 원곡과 연습</button>
-        <button id="rvStep">이 구간 한 음씩 연습</button>
-        <button id="rvAgain">전체 다시</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- 한 음씩 연습 (원곡 없이) -->
-  <section class="screen" id="step">
-    <header><button class="icon" data-go="editor">←</button><h2>한 음씩 연습</h2><span id="stCount" class="mono"></span></header>
-    <div class="content tight">
-      <div class="readout"><span id="stTarget">목표 -</span><span id="stMel" class="muted">멜로디 -</span></div>
-      <canvas id="stCanvas" class="graph full"></canvas>
-      <div class="hold"><div id="stHold"></div></div>
-      <div class="row wrap">
-        <button id="stPrev">◀ 이전</button>
-        <button id="stRef" class="primary">🔊 기준음</button>
-        <button id="stNext">다음 ▶</button>
-      </div>
-      <div class="row wrap">
-        <label class="chk"><input type="checkbox" id="stMelOn" />멜로디 같이 울리기</label>
-        <label class="chk"><input type="checkbox" id="stGuideOn" />화음음 계속</label>
-        <label class="chk"><input type="checkbox" id="stAuto" checked />맞추면 자동 넘김</label>
-      </div>
-      <p class="muted small">초록 띠 안에서 0.6초 버티면 성공! 원곡 없이 천천히 정확한 음을 몸에 익혀요.</p>
+      <div class="score"><span id="rsScore">0</span><small>%</small></div>
+      <p id="rsText" class="muted"></p>
+      <button class="primary big" id="rsAgain">다시 하기</button>
     </div>
   </section>
 
   <!-- 설정 -->
   <section class="screen" id="settings">
-    <header><button class="icon" data-go="home">←</button><h2>설정</h2></header>
+    <header><button class="icon" data-go="home" aria-label="뒤로">←</button><h2>설정</h2></header>
     <div class="content">
-      <label class="field">허용 오차 (센트, 100센트 = 반음) <input type="number" id="setTol" min="10" max="80" step="5" /></label>
-      <label class="field">지연 보정 (ms) — 블루투스 이어폰은 200~300 <input type="number" id="setLat" min="0" max="600" step="10" /></label>
-      <label class="chk"><input type="checkbox" id="setOct" />옥타브 무시 (남녀 음역 차이 허용)</label>
-      <label class="chk"><input type="checkbox" id="setAec" />마이크 에코 제거 (스피커 사용 시)</label>
-      <label class="field">가이드음 볼륨 <input type="range" id="setVol" min="0" max="0.4" step="0.02" /></label>
+      <div class="field">허용 오차
+        <div class="seg" id="tolSeg">
+          <button data-t="70">넉넉하게</button><button data-t="50">보통</button><button data-t="30">정확하게</button>
+        </div>
+        <span class="small muted">보통 = 반음의 절반(50센트)까지 초록색</span>
+      </div>
+      <label class="chk"><input type="checkbox" id="setOct" />옥타브 달라도 인정</label>
+      <label class="field">화음음 크기 <input type="range" id="setVol" min="0.02" max="0.4" step="0.02" /></label>
+      <label class="chk"><input type="checkbox" id="setSlow" />천천히 (0.8배속)</label>
       <hr />
-      <h3>앱 다운로드</h3>
-      <p class="muted small">안드로이드: <a href="https://github.com/hojung1231/harmony-coach/releases/download/android/harmony-coach.apk">harmony-coach.apk 다운로드</a> → 설치 (출처를 알 수 없는 앱 허용 필요)<br>아이폰: 사파리로 이 페이지를 열고 공유 → 홈 화면에 추가</p>
-      <hr />
-      <h3>앱 업데이트</h3>
-      <div class="row"><span class="muted">현재 버전 <b id="appVer"></b></span><span class="spacer"></span><button id="updateCheck">업데이트 확인</button></div>
-      <p class="muted small">업데이트해도 저장한 노래와 기록은 지워지지 않아요.</p>
-      <hr />
-      <h3>마이크 테스트</h3>
-      <div class="row"><button id="micTest">🎙 테스트</button><span id="micOut" class="mono">-</span></div>
+      <div class="row"><span class="muted">버전 <b id="appVer"></b></span><span class="spacer"></span><button id="updateCheck">업데이트 확인</button></div>
+      <p class="small muted">🎧 이어폰을 끼세요. 스피커로 들으면 마이크가 화음음을 내 목소리로 착각할 수 있어요.</p>
     </div>
   </section>
 
   <div id="toast" class="toast"></div>
-  <audio id="audio" preload="auto" playsinline></audio>
-  <input type="file" id="fileInput" accept="audio/*,video/*,.mp3,.m4a,.wav,.flac,.ogg,.aac" multiple hidden />
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

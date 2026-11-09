@@ -1,7 +1,7 @@
 {
   "name": "화음 코치 - Harmony Coach",
   "short_name": "화음 코치",
-  "description": "노래 멜로디를 분석해 화음을 만들고, 내 목소리를 실시간 그래프로 교정해요.",
+  "description": "악보로 만든 화음을 가사와 함께 부르고, 내 음이 맞는지 화면 색으로 바로 확인해요.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -25,29 +25,5 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ],
-  "share_target": {
-    "action": "./share-target",
-    "method": "POST",
-    "enctype": "multipart/form-data",
-    "params": {
-      "title": "title",
-      "files": [
-        {
-          "name": "audio",
-          "accept": [
-            "audio/*",
-            "video/mp4",
-            ".mp3",
-            ".m4a",
-            ".aac",
-            ".wav",
-            ".flac",
-            ".ogg",
-            ".opus"
-          ]
-        }
-      ]
-    }
-  }
+  ]
 }
