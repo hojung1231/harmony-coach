@@ -79,11 +79,20 @@ export class MicPitch {
 export class Voice {
   constructor(ctx, type = 'triangle') {
     this.ctx = ctx;
+    if (!ctx._master) {
+      // 공용 출력: 압축기로 크게, 찌그러지지 않게
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -18; comp.ratio.value = 4;
+      const master = ctx.createGain(); master.gain.value = 1.6;
+      master.connect(comp).connect(ctx.destination);
+      ctx._master = master;
+    }
     this.osc = ctx.createOscillator();
-    this.osc.type = type;
+    this.osc.type = type === 'sine' ? 'triangle' : 'sawtooth';   // 배음이 있어야 폰 스피커로도 들림
+    this.lp = ctx.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.frequency.value = type === 'sine' ? 1400 : 2600;
     this.g = ctx.createGain();
     this.g.gain.value = 0;
-    this.osc.connect(this.g).connect(ctx.destination);
+    this.osc.connect(this.lp).connect(this.g).connect(ctx._master);
     this.osc.start();
     this.cur = null;
   }
@@ -103,4 +112,11 @@ export class Voice {
     } else this.g.gain.setTargetAtTime(vol, t, 0.05);
   }
   off() { this.set(null, 0); }
+  /** 짧은 소리 (카운트·테스트용) */
+  static blip(ctx, midi, dur = 0.08, vol = 0.3) {
+    const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
+    o.type = 'square'; o.frequency.value = 440 * Math.pow(2, (midi - 69) / 12);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(ctx._master || ctx.destination); o.start(t); o.stop(t + dur + 0.02);
+  }
 }

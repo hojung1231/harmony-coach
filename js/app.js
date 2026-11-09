@@ -11,10 +11,11 @@ const noteLabel = (m) => `${NAMES[pcOf(m)]}${Math.floor(Math.round(m) / 12) - 1}
 const fmt = (t) => `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, '0')}`;
 
 /* ---------- 설정 ---------- */
-const DEF = { tol: 50, octaveFree: true, vol: 0.14, melVol: 0.08, speed: 1, mel: false, harm: 'third_up', tone: true };
+const DEF = { tol: 50, octaveFree: true, vol: 0.3, melVol: 0.16, aec: false, speed: 1, mel: false, harm: 'third_up', tone: true };
 let S = { ...DEF };
 try { S = { ...DEF, ...JSON.parse(localStorage.getItem('hc2') || '{}') }; } catch {}
 const save = () => { try { localStorage.setItem('hc2', JSON.stringify(S)); } catch {} };
+if (!S.sv || S.sv < 2) { S.vol = DEF.vol; S.melVol = DEF.melVol; S.aec = false; S.sv = 2; save(); }   // 2.2: 소리 크게
 
 function toast(msg, ms = 2200) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
@@ -142,8 +143,10 @@ let actx, voice, melVoice, mic;
 const P = { t: 0, playing: false, base: 0, baseT: 0, hist: [], state: 'none', pend: 'none', pendN: 0, hit: 0, tot: 0, end: 0 };
 
 function getCtx() {
-  if (!actx) { actx = new (window.AudioContext || window.webkitAudioContext)(); voice = new Voice(actx, 'triangle'); melVoice = new Voice(actx, 'sine'); }
-  if (actx.state === 'suspended') actx.resume();
+  // 아이폰: 무음 모드에서도 소리 나게 + 마이크와 함께 쓰기
+  try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch {}
+  if (!actx) { actx = new (window.AudioContext || window.webkitAudioContext)(); voice = new Voice(actx, 'saw'); melVoice = new Voice(actx, 'sine'); }
+  if (actx.state !== 'running') actx.resume();
   return actx;
 }
 function rate() { return S.speed || 1; }
@@ -151,6 +154,7 @@ function now() { return P.playing ? P.baseT + ((performance.now() - P.base) / 10
 
 function startPlay(text) {
   lyr = attachLyrics(current, text);
+  buildNoteSyl();
   const last = current.notes[current.notes.length - 1];
   P.end = last[0] + last[1] + 1;
   P.t = 0; P.playing = false; P.hit = 0; P.tot = 0; P.hist = []; setState('none');
@@ -169,8 +173,9 @@ function stopPlay() {
 async function togglePlay() {
   getCtx();
   if (!mic) {
-    try { mic = new MicPitch(); await mic.start(actx, { aec: true }); }
+    try { mic = new MicPitch(); await mic.start(actx, { aec: S.aec }); }
     catch (err) { mic = null; toast('마이크를 허용해 주세요', 3000); }
+    try { await actx.resume(); } catch {}   // 마이크 켤 때 소리가 멈추는 기기 대비
   }
   if (P.playing) { P.t = now(); P.playing = false; voice.off(); melVoice.off(); $('#plPlay').textContent = '▶'; }
   else {
@@ -246,6 +251,11 @@ function frame() {
   const harm = current.harmony[S.harm];
   const target = ni >= 0 ? harm[ni] : null;
 
+  // 시작 전 카운트 (박마다 '틱')
+  if (P.playing && current.eighth && t < current.notes[0][0]) {
+    const beat = Math.floor(t / (current.eighth * 3));
+    if (beat !== P.lastBeat) { P.lastBeat = beat; Voice.blip(actx, 84); }
+  } else P.lastBeat = -1;
   // 화음음
   if (voice) voice.set(P.playing && S.tone && target != null ? target : null, S.vol);
   if (melVoice) melVoice.set(P.playing && S.mel && ni >= 0 ? current.notes[ni][2] : null, S.melVol);
@@ -280,9 +290,85 @@ function frame() {
   else hint.textContent = `목표 ${noteLabel(tgt)} · ${cents == null ? '' : (cents > 0 ? '+' : '') + Math.round(cents) + '센트'}`;
 
   renderLyrics(t, ni);
+  drawStaff(t, ni);
   $('#plTime').textContent = `${fmt(t / rate())} / ${fmt(P.end / rate())}${rate() !== 1 ? ' · ' + rate() + '배' : ''}`;
   $('#prog').style.width = `${Math.min(100, (t / P.end) * 100)}%`;
   raf = requestAnimationFrame(frame);
+}
+
+/* ---------- 악보 그리기 (오선, D장조 조표, 멜로디=회색, 화음=파랑) ---------- */
+const SPELL = { 0: [0, '♮'], 1: [0, ''], 2: [1, ''], 3: [1, '♯'], 4: [2, ''], 5: [3, '♮'], 6: [3, ''], 7: [4, ''], 8: [4, '♯'], 9: [5, ''], 10: [6, '♭'], 11: [6, ''] };
+// D장조 기준 표기: C#·F# 는 조표에 있어 임시표 없음
+function staffPos(midi) {           // 아래 첫 줄(E4)=0, 한 칸=1/2줄
+  const pc = ((midi % 12) + 12) % 12, oct = Math.floor(midi / 12) - 1;
+  const [letter, acc] = SPELL[pc];
+  return { step: oct * 7 + letter - (4 * 7 + 2), acc };
+}
+let noteSyl = [];
+function buildNoteSyl() {
+  noteSyl = new Array(current.notes.length).fill('');
+  for (const l of lyr.lines) for (const w of l.words) for (const x of w) if (x.i >= 0) noteSyl[x.i] = x.s;
+}
+function drawStaff(t, ni) {
+  const cv = $('#staff');
+  if (!current.eighth) { cv.style.display = 'none'; return; }
+  cv.style.display = '';
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const gap = 13, bottom = h - 64, LX = 44, playX = Math.max(90, w * 0.3), px = 30;   // 8분음표 하나 = 30px
+  const curE = t / current.eighth;
+  const X = (e) => playX + (e - curE) * px;
+  const Y = (step) => bottom - step * (gap / 2);
+  const ink = '#1b2033', soft = '#9aa0b8', blue = '#2f6fe0', hot = '#e8a000';
+  // 오선
+  g.strokeStyle = ink; g.lineWidth = 1;
+  for (let i = 0; i < 5; i++) { const y = Y(i * 2); g.beginPath(); g.moveTo(LX, y); g.lineTo(w - 6, y); g.stroke(); }
+  // 높은음자리표 대신 조표 영역 (흰 배경으로 지나가는 음 가림)
+  // 마디선
+  g.strokeStyle = '#555b75';
+  for (const b of current.bars) { const x = X(b); if (x > LX + 30 && x < w) { g.beginPath(); g.moveTo(x, Y(8)); g.lineTo(x, Y(0)); g.stroke(); } }
+  const harm = current.harmony[S.harm], W = current.writtenOctave || 0;
+  const drawNote = (i, midi, color, isHarm) => {
+    const n = current.notes[i], x = X(n[4]), x2 = X(n[4] + n[5]);
+    if (x2 < LX + 30 || x > w + 10) return;
+    const { step, acc } = staffPos(midi + W), y = Y(step);
+    // 덧줄
+    g.strokeStyle = color; g.lineWidth = 1;
+    for (let s = 10; s <= step; s += 2) { g.beginPath(); g.moveTo(x - 9, Y(s)); g.lineTo(x + 9, Y(s)); g.stroke(); }
+    for (let s = -2; s >= step; s -= 2) { g.beginPath(); g.moveTo(x - 9, Y(s)); g.lineTo(x + 9, Y(s)); g.stroke(); }
+    // 길이 막대 (음 길이만큼)
+    g.fillStyle = color; g.globalAlpha = 0.28; g.fillRect(x, y - 3, Math.max(4, x2 - x - 3), 6); g.globalAlpha = 1;
+    // 음표 머리
+    g.beginPath(); g.ellipse(x, y, 6.2, 4.6, -0.35, 0, 7); g.fill();
+    if (acc) { g.font = '15px serif'; g.textAlign = 'right'; g.textBaseline = 'middle'; g.fillText(acc, x - 8, y); g.textAlign = 'left'; }
+    // 기둥 (8분음표 이상 길이 감각용 아주 짧게)
+    g.strokeStyle = color; g.lineWidth = 1.4; g.beginPath();
+    if (step < 4) { g.moveTo(x + 5.6, y); g.lineTo(x + 5.6, y - 26); } else { g.moveTo(x - 5.6, y); g.lineTo(x - 5.6, y + 26); }
+    g.stroke();
+  };
+  for (let i = 0; i < current.notes.length; i++) {
+    const on = i === ni;
+    drawNote(i, current.notes[i][2], on ? hot : soft, false);
+  }
+  for (let i = 0; i < current.notes.length; i++) drawNote(i, harm[i], i === ni ? hot : blue, true);
+  // 가사
+  g.font = '600 14px -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif'; g.textBaseline = 'top'; g.textAlign = 'left';
+  for (let i = 0; i < current.notes.length; i++) {
+    const s = noteSyl[i]; if (!s) continue;
+    const x = X(current.notes[i][4]); if (x < LX + 26 || x > w) continue;
+    g.fillStyle = i === ni ? hot : ink; g.fillText(s, x - 6, Y(-6) + 4);
+  }
+  // 왼쪽: 흰 가림 + 조표 (♯♯: F5, C5)
+  g.fillStyle = 'rgba(255,255,255,.94)'; g.fillRect(0, 0, LX + 30, h);
+  g.strokeStyle = ink; g.lineWidth = 1;
+  for (let i = 0; i < 5; i++) { const y = Y(i * 2); g.beginPath(); g.moveTo(8, y); g.lineTo(LX + 30, y); g.stroke(); }
+  g.fillStyle = ink; g.font = '22px serif'; g.textBaseline = 'middle';
+  g.fillText('♯', 14, Y(8)); g.fillText('♯', 28, Y(5));
+  if (current.time) { const [a, b] = current.time.split('/'); g.font = 'bold 15px serif'; g.fillStyle = ink; g.textAlign = 'center'; g.fillText(a, 58, Y(6)); g.fillText(b, 58, Y(2)); g.textAlign = 'left'; }
+  // 지금 위치
+  g.strokeStyle = hot; g.lineWidth = 2; g.beginPath(); g.moveTo(playX, 8); g.lineTo(playX, h - 8); g.stroke();
 }
 
 function finish() {
@@ -297,11 +383,17 @@ $('#rsAgain').onclick = () => openSong(current);
 /* ---------- 설정 ---------- */
 function renderSettings() {
   document.querySelectorAll('#tolSeg button').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.t === S.tol));
-  $('#setOct').checked = S.octaveFree; $('#setVol').value = S.vol; $('#setMelVol').value = S.melVol;
+  $('#setAec').checked = S.aec; $('#setOct').checked = S.octaveFree; $('#setVol').value = S.vol; $('#setMelVol').value = S.melVol;
   $('#appVer').textContent = APP_VERSION;
 }
 document.querySelectorAll('#tolSeg button').forEach((b) => b.onclick = () => { S.tol = +b.dataset.t; save(); renderSettings(); });
 $('#setOct').onchange = (e) => { S.octaveFree = e.target.checked; save(); };
+$('#setAec').onchange = (e) => { S.aec = e.target.checked; save(); };
+$('#soundTest').onclick = () => {
+  getCtx();
+  voice.set(57, S.vol); setTimeout(() => voice.set(61, S.vol), 400); setTimeout(() => voice.set(64, S.vol), 800); setTimeout(() => voice.off(), 1300);
+  toast('라·도#·미 소리가 들리면 정상이에요. 안 들리면 미디어 볼륨과 무음 모드를 확인하세요.', 3500);
+};
 $('#setVol').onchange = (e) => { S.vol = +e.target.value; save(); };
 $('#setMelVol').onchange = (e) => { S.melVol = +e.target.value; save(); };
 
@@ -324,3 +416,5 @@ checkUpdate().then((v) => { if (v) { $('#updateVer').textContent = v; $('#update
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 renderHome();
+// 점검용: 소리 상태 (개발자 도구에서 __hc() 로 확인)
+window.__hc = () => ({ ctx: actx && actx.state, harm: voice && voice.cur, harmGain: voice && +voice.g.gain.value.toFixed(3), mel: melVoice && melVoice.cur });

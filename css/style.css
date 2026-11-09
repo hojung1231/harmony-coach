@@ -44,9 +44,10 @@ hr { border: none; border-top: 1px solid var(--line); width: 100%; }
 .fb.up { background: var(--up); } .fb.down { background: var(--down); } .fb.ok { background: var(--ok); }
 header.clear { background: transparent; }
 .stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 0 18px; position: relative; z-index: 1; text-align: center; }
-.arrow { font-size: min(34vw, 190px); line-height: 1; height: 1.05em; font-weight: 900; text-shadow: 0 4px 24px rgba(0,0,0,.35); }
+.arrow { font-size: min(22vw, 110px); line-height: 1; height: 1.05em; font-weight: 900; text-shadow: 0 4px 24px rgba(0,0,0,.35); }
 .hint { font-size: 15px; color: rgba(255,255,255,.8); min-height: 1.4em; }
-.lyric { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; }
+.staff { width: 100%; height: 190px; display: block; margin-top: 6px; background: rgba(255,255,255,.94); border-radius: 12px; }
+.lyric { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
 .lyric .now { font-size: clamp(26px, 8vw, 40px); font-weight: 800; line-height: 1.3; min-height: 1.3em; word-break: keep-all; }
 .lyric .now .done { color: rgba(255,255,255,.95); }
 .lyric .now .cur { color: #ffe066; text-decoration: underline; text-underline-offset: 6px; }

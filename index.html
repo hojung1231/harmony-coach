@@ -44,6 +44,7 @@
     <div class="stage">
       <div id="arrow" class="arrow"></div>
       <div id="hint" class="hint"></div>
+      <canvas id="staff" class="staff" aria-label="악보"></canvas>
       <div class="lyric">
         <div id="lyNow" class="now"></div>
         <div id="lyNext" class="next"></div>
@@ -89,8 +90,10 @@
         <span class="small muted">보통 = 반음의 절반(50센트)까지 초록색</span>
       </div>
       <label class="chk"><input type="checkbox" id="setOct" />옥타브 달라도 인정</label>
-      <label class="field">화음음 크기 <input type="range" id="setVol" min="0.02" max="0.4" step="0.02" /></label>
-      <label class="field">멜로디음 크기 <input type="range" id="setMelVol" min="0.02" max="0.3" step="0.02" /></label>
+      <label class="chk"><input type="checkbox" id="setAec" />스피커로 연습 (에코 제거, 소리가 작아질 수 있어요)</label>
+      <button id="soundTest">🔊 소리 테스트</button>
+      <label class="field">화음음 크기 <input type="range" id="setVol" min="0.05" max="0.6" step="0.05" /></label>
+      <label class="field">멜로디음 크기 <input type="range" id="setMelVol" min="0.05" max="0.5" step="0.05" /></label>
       <p class="small muted">느리게 연습해도 화음음·멜로디음은 앱이 직접 만드는 소리라 음정이 그대로예요. 박자만 느려져요.</p>
       <hr />
       <div class="row"><span class="muted">버전 <b id="appVer"></b></span><span class="spacer"></span><button id="updateCheck">업데이트 확인</button></div>
