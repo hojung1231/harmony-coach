@@ -60,13 +60,15 @@ header.clear { background: transparent; }
 .round.big { width: 70px; height: 70px; font-size: 30px; background: var(--accent); border-color: var(--accent); color: #fff; }
 .round.off { opacity: .4; }
 button.icon.sm { font-size: 14px; font-weight: 700; border: 1px solid rgba(255,255,255,.3); border-radius: 8px; padding: 4px 8px; }
-.vol { position: relative; z-index: 3; margin: 0 14px; padding: 10px 14px; background: rgba(10,12,24,.92); border: 1px solid var(--line); border-radius: 14px; display: flex; flex-direction: column; gap: 6px; }
-.vol[hidden] { display: none; }
-.vol label { display: grid; grid-template-columns: 64px 1fr 30px; align-items: center; gap: 8px; font-size: 14px; }
-.vol b { font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; color: var(--muted); }
 .tg { flex: 1; max-width: 120px; padding: 10px 6px; font-size: 14px; font-weight: 700; border-radius: 12px; background: var(--accent); border-color: var(--accent); color: #fff; }
 .tg.off { background: transparent; color: rgba(255,255,255,.55); border-color: rgba(255,255,255,.25); text-decoration: line-through; text-decoration-thickness: 1.5px; }
 .controls .seg button { padding: 8px 12px; }
 .score { font-size: 72px; font-weight: 900; } .score small { font-size: 28px; color: var(--muted); }
 .toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 60px); transform: translateX(-50%); background: #000d; padding: 10px 16px; border-radius: 20px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 9; max-width: 90%; text-align: center; }
 .toast.show { opacity: 1; }
+.tg { touch-action: none; user-select: none; -webkit-user-select: none; }
+.volpop { position: fixed; transform: translateX(-50%); z-index: 8; background: rgba(10,12,24,.95); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; font-size: 13px; }
+.volpop[hidden] { display: none; }
+.volpop .track { width: 26px; height: 150px; border-radius: 13px; background: rgba(255,255,255,.12); position: relative; overflow: hidden; }
+.volpop .track div { position: absolute; left: 0; right: 0; bottom: 0; background: var(--accent); }
+.volpop b { font-size: 20px; font-variant-numeric: tabular-nums; }

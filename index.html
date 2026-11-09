@@ -40,12 +40,7 @@
   <!-- 연습 -->
   <section class="screen" id="play">
     <div id="fb" class="fb"></div>
-    <header class="clear"><button class="icon" id="plBack" aria-label="뒤로">←</button><h2 id="plTitle"></h2><span id="plTime" class="mono"></span><button class="icon sm" id="plLyrics" aria-label="가사 고치기">가사</button><button class="icon" id="plVolBtn" aria-label="볼륨">🔈</button></header>
-    <div id="volPanel" class="vol" hidden>
-      <label>화음음 <input type="range" id="vTone" min="0" max="100" step="1" /><b id="vToneN"></b></label>
-      <label>멜로디음 <input type="range" id="vMel" min="0" max="100" step="1" /><b id="vMelN"></b></label>
-      <label>원곡 <input type="range" id="vOrig" min="0" max="100" step="1" /><b id="vOrigN"></b></label>
-    </div>
+    <header class="clear"><button class="icon" id="plBack" aria-label="뒤로">←</button><h2 id="plTitle"></h2><span id="plTime" class="mono"></span><button class="icon sm" id="plLyrics" aria-label="가사 고치기">가사</button></header>
     <div class="stage">
       <div id="arrow" class="arrow"></div>
       <div id="hint" class="hint"></div>
@@ -101,7 +96,7 @@
       <label class="chk"><input type="checkbox" id="setAec" />스피커 소리 걸러내기</label>
       <p class="small muted">켜면: 마이크 에코 제거, 멜로디음과 같은 음은 판정에서 빼고, 시작할 때 스피커 소리 크기를 재서 그보다 큰 소리(폰 가까이에서 부르는 내 목소리)만 판정해요. 시작 카운트 때는 조용히 해 주세요. 이어폰을 끼면 꺼도 돼요.</p>
       <button id="soundTest">🔊 소리 테스트</button>
-      <p class="small muted">볼륨은 연습 화면 오른쪽 위 🔈 에서 화음음·멜로디음·원곡을 따로 조절해요.</p>
+      <p class="small muted">음량: 연습 화면의 화음음·멜로디음·원곡 버튼을 누른 채 위로 끌면 커지고 아래로 끌면 작아져요. 한 번 누르면 켜기/끄기예요.</p>
       <p class="small muted">느리게 연습해도 화음음·멜로디음은 앱이 직접 만드는 소리라 음정이 그대로예요. 박자만 느려져요.</p>
       <button id="origClear">연결한 원곡 파일 지우기</button>
       <p class="small muted">원곡은 연습 화면의 '원곡+' 버튼으로 폰에 있는 음원 파일을 한 번 연결하면 1배속에서 함께 나와요. 파일은 이 폰에만 저장돼요.</p>
@@ -112,6 +107,7 @@
   </section>
 
   <input type="file" id="origFile" accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg,.flac" hidden />
+  <div id="volPop" class="volpop" hidden><span id="volPopLabel"></span><div class="track"><div id="volPopFill"></div></div><b id="volPopNum"></b></div>
   <div id="toast" class="toast"></div>
   <script type="module" src="js/app.js"></script>
 </body>

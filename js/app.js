@@ -266,15 +266,15 @@ async function togglePlay() {
 }
 $('#plPlay').onclick = togglePlay;
 $('#plRestart').onclick = () => { P.t = 0; P.baseT = 0; P.base = performance.now(); P.hit = 0; P.tot = 0; origEl.currentTime = 0; };
-$('#plTone').onclick = () => { S.tone = !S.tone; save(); syncButtons(); toast(S.tone ? '화음음 켬' : '화음음 끔', 900); };
-$('#plMel').onclick = () => { S.mel = !S.mel; save(); syncButtons(); toast(S.mel ? '멜로디음 켬' : '멜로디음 끔', 900); };
+const tapTone = () => { S.tone = !S.tone; save(); syncButtons(); toast(S.tone ? '화음음 켬' : '화음음 끔', 900); };
+const tapMel = () => { S.mel = !S.mel; save(); syncButtons(); toast(S.mel ? '멜로디음 켬' : '멜로디음 끔', 900); };
 document.querySelectorAll('#speedSeg button').forEach((b) => b.onclick = () => {
   const r = +b.dataset.r;
   if (r !== 1 && ORIG()) toast('원곡은 1배에서만 나와요. 화음음·멜로디음으로 연습해요.', 2500);
   switchMode(() => { S.speed = r; if (r !== 1) S.orig = false; save(); });
 });
 // 원곡 버튼: 처음엔 폰의 음원 파일을 한 번 연결
-$('#plOrig').onclick = () => {
+const tapOrig = () => {
   if (!origUrl) { $('#origFile').click(); return; }
   const on = !ORIG();
   switchMode(() => { S.orig = on; if (on) S.speed = 1; save(); });
@@ -298,17 +298,43 @@ $('#plLyrics').onclick = async () => {
   $('#lyText').value = (await lyricsOf(current)) || '';
   checkLyrics(); show('lyrics');
 };
-// 볼륨 패널
-$('#plVolBtn').onclick = () => { const v = $('#volPanel'); v.hidden = !v.hidden; syncVol(); };
+// 화음음·멜로디음·원곡 버튼: 탭 = 켜기/끄기, 누른 채 위아래로 끌기 = 음량
 const toGain = (x, max) => max * Math.pow(x / 100, 2);       // 0~100 → 0~max (작은 소리 쪽을 촘촘하게)
 const toSlider = (g, max) => Math.round(Math.sqrt(Math.max(0, g) / max) * 100);
-function syncVol() {
-  $('#vTone').value = toSlider(S.vol, 0.6); $('#vMel').value = toSlider(S.melVol, 0.6); $('#vOrig').value = toSlider(S.origVol, 1);
-  $('#vToneN').textContent = $('#vTone').value; $('#vMelN').textContent = $('#vMel').value; $('#vOrigN').textContent = $('#vOrig').value;
+function volButton(id, key, max, label, onTap) {
+  const btn = $(id), pop = $('#volPop');
+  let st = null;
+  btn.addEventListener('pointerdown', (e) => {
+    st = { y: e.clientY, v: toSlider(S[key], max), drag: false };
+    btn.setPointerCapture(e.pointerId);
+  });
+  btn.addEventListener('pointermove', (e) => {
+    if (!st) return;
+    const dy = st.y - e.clientY;
+    if (!st.drag && Math.abs(dy) > 10) {
+      st.drag = true;
+      const r = btn.getBoundingClientRect();
+      pop.style.left = `${r.left + r.width / 2}px`; pop.style.bottom = `${window.innerHeight - r.top + 10}px`;
+      pop.hidden = false; $('#volPopLabel').textContent = label;
+      getCtx();
+    }
+    if (st.drag) {
+      const v = Math.max(0, Math.min(100, Math.round(st.v + dy / 1.6)));   // 1.6px = 1
+      S[key] = toGain(v, max); applyOrigVol();
+      $('#volPopFill').style.height = `${v}%`; $('#volPopNum').textContent = v;
+    }
+  });
+  const end = () => {
+    if (!st) return;
+    const wasDrag = st.drag; st = null; pop.hidden = true;
+    if (wasDrag) save(); else onTap();
+  };
+  btn.addEventListener('pointerup', end);
+  btn.addEventListener('pointercancel', () => { if (st && st.drag) save(); st = null; pop.hidden = true; });
 }
-for (const [id, key, max] of [['#vTone', 'vol', 0.6], ['#vMel', 'melVol', 0.6], ['#vOrig', 'origVol', 1]]) {
-  $(id).addEventListener('input', (e) => { S[key] = toGain(+e.target.value, max); save(); syncVol(); applyOrigVol(); });
-}
+volButton('#plTone', 'vol', 0.6, '화음음', tapTone);
+volButton('#plMel', 'melVol', 0.6, '멜로디음', tapMel);
+volButton('#plOrig', 'origVol', 1, '원곡', tapOrig);
 document.querySelectorAll('#harmSeg button').forEach((b) => b.onclick = () => { S.harm = b.dataset.h; save(); syncButtons(); });
 function syncButtons() {
   for (const [id, on] of [['#plTone', S.tone], ['#plMel', S.mel], ['#plOrig', ORIG()]]) { $(id).classList.toggle('off', !on); $(id).setAttribute('aria-pressed', on); }
