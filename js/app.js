@@ -260,6 +260,7 @@ async function togglePlay() {
   else {
     if (now() >= P.end - 0.05) { P.t = 0; P.hit = 0; P.tot = 0; if (ORIG()) origEl.currentTime = 0; }
     P.baseT = P.t; P.base = performance.now(); P.playing = true; $('#plPlay').textContent = '⏸';
+    if (S.filter) P.calib = { t0: performance.now(), lv: [] };
     if (ORIG()) { try { await origEl.play(); } catch (e) { toast('원곡을 재생할 수 없어요: ' + e.message); } }
   }
 }
@@ -376,24 +377,24 @@ function frame() {
     const beat = Math.floor(t / (current.eighth * 3));
     if (beat !== P.lastBeat) { P.lastBeat = beat; Voice.blip(actx, 84); }
   } else P.lastBeat = -1;
-  // 화음음: 걸러내기 켜면 음이 바뀔 때만 짧게(0.35초) — 그 뒤 내 목소리만 판정
-  // 0.45초 이상인 음에서 음이 바뀔 때만, 최대 0.3초(또는 음 길이의 40%)
-  const cueLen = ni >= 0 && TL[ni][1] >= 0.45 && (ni === 0 || harm[ni - 1] !== harm[ni] || TL[ni][0] - (TL[ni - 1][0] + TL[ni - 1][1]) > 0.3)
-    ? Math.min(0.3 * rate(), TL[ni][1] * 0.4) : 0;
-  const inCue = ni >= 0 && t - TL[ni][0] < cueLen;
-  const toneOn = P.playing && S.tone && target != null && (!S.filter || inCue);
-  if (voice) voice.set(toneOn ? target : null, S.vol);
+  // 화음음: 계속 들려줌. 시작 카운트 동안엔 첫 화음음을 미리 들려줘서 첫 음을 잡게 함
+  const preRoll = P.playing && !ORIG() && t < TL[0][0];
+  const toneMidi = !P.playing || !S.tone ? null : preRoll ? (t > TL[0][0] - 1.0 ? harm[0] : null) : target;
+  if (voice) voice.set(toneMidi, S.vol);
   const melMidi = P.playing && S.mel && ni >= 0 ? current.notes[ni][2] : null;
   if (melVoice) melVoice.set(melMidi, S.melVol);
 
   // 내 목소리 (반응 시간 0.12초 감안)
   let sung = mic ? mic.read() : null;
+  // 스피커 소리 크기 재기: 재생 시작 후 처음 ~0.9초(카운트·첫 화음음) 동안, 사용자가 조용할 때 마이크에 들어오는 소리
+  if (mic && P.playing && P.calib && performance.now() - P.calib.t0 < 900) { P.calib.lv.push(mic.level || 0); }
+  else if (P.calib && P.calib.lv.length) { const a = P.calib.lv.sort((x, y) => x - y); P.leak = a[Math.floor(a.length * 0.7)] || 0; P.calib = null; }
   if (sung != null && S.filter) {
     const near = (a, b) => { let d = a - b; d -= 12 * Math.round(d / 12); return Math.abs(d) < 0.35; };
     // 스피커에서 나온 멜로디음을 잡은 것 → 무시 (화음 목표와 다를 때만)
     if (melMidi != null && near(sung, melMidi) && target != null && !near(sung, target)) sung = null;
-    // 화음음이 나오는 중(+여운 0.1초)은 판정 안 함
-    if (S.tone && cueLen > 0 && t - TL[ni][0] < cueLen + 0.06) sung = null;
+    // 스피커에서 새어 들어오는 크기보다 충분히 커야 내 목소리로 인정
+    else if ((mic.level || 0) < Math.max(0.008, (P.leak || 0) * 2.2)) sung = null;
   }
   if (sung != null) { P.hist.push(sung); if (P.hist.length > 5) P.hist.shift(); } else P.hist = [];
   const tj = noteIndexAt(t - 0.12 * rate());
