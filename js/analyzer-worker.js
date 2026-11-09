@@ -7,6 +7,7 @@ const FS = 22050, N = 2048, HOP = 512;
 const CENT_MIN = 600, CENT_MAX = 5200, CBIN = 10; // 55Hz 기준 센트
 const NB = Math.floor((CENT_MAX - CENT_MIN) / CBIN) + 1;
 const H = 8, ALPHA = 0.8, K = 4, LAMBDA = 0.25;
+let HPSS = false, HPSS_T = 8, HPSS_F = 8;
 
 function downsample(x, sr) {
   if (sr <= FS * 1.01) return { y: x, fs: sr };
@@ -60,7 +61,10 @@ function analyze(L, R, sr, progress) {
   const sal = new Float64Array(NB);
   const cBin = new Float32Array(nFrames * K), cVal = new Float32Array(nFrames * K);
   const pkF = new Float64Array(400), pkM = new Float64Array(400);
+  const NBIN = maxBin + 2;
+  const spec = new Float32Array(nFrames * NBIN);
 
+  // 1단계: 스펙트로그램 (보컬 중앙 강조)
   for (let fr = 0; fr < nFrames; fr++) {
     const o = fr * HOP;
     for (let i = 0; i < N; i++) {
@@ -69,11 +73,9 @@ function analyze(L, R, sr, progress) {
       im[i] = r && idx < len ? r[idx] * win[i] : 0;
     }
     fft(re, im);
-    let fmax = 0;
     for (let k = 1; k <= maxBin + 1; k++) {
       let m;
       if (r) {
-        // Z = L + iR → L, R 분리
         const zr = re[k], zi = im[k], cr = re[N - k], ci = -im[N - k];
         const Lr = (zr + cr) / 2, Li = (zi + ci) / 2;
         const Rr = (zi - ci) / 2, Ri = -(zr - cr) / 2;
@@ -82,9 +84,44 @@ function analyze(L, R, sr, progress) {
         const mr = (Lr + Rr) / 2, mi = (Li + Ri) / 2;
         m = Math.sqrt(mr * mr + mi * mi) * sim * sim;
       } else m = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
-      m *= fw[k];
-      mag[k] = m;
-      lmag[k] = Math.log(m + 1e-9);
+      spec[fr * NBIN + k] = m * fw[k];
+    }
+    if (fr % 200 === 0) progress(0.4 * (fr / nFrames));
+  }
+
+  // 2단계: 타악기(드럼) 성분 억제 — HPSS 중앙값 필터
+  if (HPSS) {
+    const TW = HPSS_T, FW = HPSS_F, buf = new Float32Array(Math.max(TW, FW) * 2 + 1);
+    const med = (n) => { const a = buf.subarray(0, n); a.sort(); return a[n >> 1]; };
+    const col = new Float32Array(nFrames);
+    const H = new Float32Array(nFrames * NBIN);
+    for (let k = 1; k <= maxBin + 1; k++) {
+      for (let fr = 0; fr < nFrames; fr++) col[fr] = spec[fr * NBIN + k];
+      for (let fr = 0; fr < nFrames; fr++) {
+        let c = 0;
+        for (let j = fr - TW; j <= fr + TW; j++) buf[c++] = col[Math.min(nFrames - 1, Math.max(0, j))];
+        H[fr * NBIN + k] = med(c);
+      }
+      if (k % 40 === 0) progress(0.4 + 0.25 * (k / maxBin));
+    }
+    for (let fr = 0; fr < nFrames; fr++) {
+      const row = fr * NBIN;
+      for (let k = 1; k <= maxBin + 1; k++) {
+        let c = 0;
+        for (let j = k - FW; j <= k + FW; j++) buf[c++] = spec[row + Math.min(maxBin + 1, Math.max(1, j))];
+        const P = med(c), h = H[row + k], h2 = h * h, p2 = P * P;
+        mag[k] = spec[row + k] * (h2 + p2 > 0 ? h2 / (h2 + p2) : 0);
+      }
+      for (let k = 1; k <= maxBin + 1; k++) spec[row + k] = mag[k];
+    }
+  }
+
+  // 3단계: 하모닉 합산 살리언스
+  for (let fr = 0; fr < nFrames; fr++) {
+    let fmax = 0;
+    for (let k = 1; k <= maxBin + 1; k++) {
+      const m = spec[fr * NBIN + k];
+      mag[k] = m; lmag[k] = Math.log(m + 1e-9);
       if (m > fmax) fmax = m;
     }
     // 스펙트럼 피크
@@ -130,7 +167,7 @@ function analyze(L, R, sr, progress) {
         }
       }
     }
-    if (fr % 200 === 0) progress(0.95 * (fr / nFrames));
+    if (fr % 200 === 0) progress(0.65 + 0.3 * (fr / nFrames));
   }
 
   // 비터비
