@@ -422,9 +422,18 @@ function frame() {
     // 스피커에서 새어 들어오는 크기보다 충분히 커야 내 목소리로 인정
     else if ((mic.level || 0) < Math.max(0.008, (P.leak || 0) * 2.2)) sung = null;
   }
-  if (sung != null) { P.hist.push(sung); if (P.hist.length > 5) P.hist.shift(); } else P.hist = [];
+  const nowMs = performance.now();
+  if (sung != null) { P.hist.push(sung); if (P.hist.length > 5) P.hist.shift(); P.lastVoice = nowMs; }
+  else if (nowMs - (P.lastVoice || 0) > 250) P.hist = [];          // 잠깐(0.25초 이하) 못 잡은 건 무시
   const tj = noteIndexAt(t - 0.12 * rate());
-  const tgt = tj >= 0 ? harm[tj] : target;
+  let tgt = tj >= 0 ? harm[tj] : target;
+  if (tgt == null && P.playing) {
+    // 짧은 쉼표(0.6초 이하) 동안 계속 부르면: 앞 음(또는 곧 시작할 다음 음) 기준으로 판정
+    let k = -1; for (let i = 0; i < TL.length && TL[i][0] <= t; i++) k = i;
+    const prevEnd = k >= 0 ? TL[k][0] + TL[k][1] : -1, next = TL[k + 1];
+    if (next && next[0] - t < 0.3 * rate()) tgt = harm[k + 1];
+    else if (k >= 0 && t - prevEnd < 0.6 * rate() && (!next || next[0] - prevEnd < 1.2 * rate())) tgt = harm[k];
+  }
   let st = 'none', cents = null;
   if (P.playing && tgt != null && P.hist.length >= 3) {
     const v = P.hist.slice().sort((a, b) => a - b)[P.hist.length >> 1];
@@ -433,9 +442,11 @@ function frame() {
     cents = d * 100;
     st = Math.abs(cents) <= S.tol ? 'ok' : cents < 0 ? 'up' : 'down';
   }
-  // 깜빡임 방지: 같은 판정이 3프레임 이어질 때 바꿈
+  // 깜빡임 방지: 같은 판정이 3프레임 이어질 때 바꿈. 판정이 끊겨도 0.5초는 마지막 판정 유지
+  if (st !== 'none') P.lastJudge = nowMs;
+  if (st === 'none' && P.playing && nowMs - (P.lastJudge || 0) < 500) st = P.state;
   if (st === P.pend) P.pendN++; else { P.pend = st; P.pendN = 1; }
-  if (P.pendN >= 3 || st === 'none') setState(st);
+  if (P.pendN >= 3 || (st === 'none' && !P.playing)) setState(st);
   // 점수: 화음 음이 있는 시간 중 초록인 비율
   if (P.playing && tgt != null && ni >= 0 && t - TL[ni][0] > 0.1) { P.tot++; if (st === 'ok') P.hit++; }
 
