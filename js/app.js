@@ -251,7 +251,7 @@ function stopPlay() {
 async function togglePlay() {
   getCtx();
   if (!mic) {
-    try { mic = new MicPitch(); await mic.start(actx, { aec: S.filter }); }
+    try { mic = new MicPitch(); await mic.start(actx, { aec: false }); }   // 폰 에코 제거는 긴 음을 지워 버려서 끔 — 앱이 직접 거름
     catch (err) { mic = null; toast('마이크를 허용해 주세요. 설정 → 앱 → 화음 코치 → 권한 → 마이크 → "앱 사용 중에만 허용"', 5000); }
     try { await actx.resume(); } catch {}   // 마이크 켤 때 소리가 멈추는 기기 대비
   }
@@ -415,6 +415,10 @@ function frame() {
   if (mic && P.playing && P.calib && performance.now() - P.calib.t0 < 900) { P.calib.lv.push(mic.level || 0); }
   else if (P.calib && P.calib.lv.length) { const a = P.calib.lv.sort((x, y) => x - y); P.leak = a[Math.floor(a.length * 0.7)] || 0; P.calib = null; }
   const rawSung = sung;
+  if (P.lock && P.lock.ni !== ni && ni >= 0) {
+    // 다음 음이 같은 화음 음(이음줄·같은 음 반복)이면 잠금 이어감
+    if (harm[ni] === harm[P.lock.ni] && TL[ni][0] - (TL[P.lock.ni][0] + TL[P.lock.ni][1]) < 0.15) P.lock.ni = ni; else P.lock = null;
+  }
   if (sung != null && S.filter) {
     // 버리는 건 딱 하나: 앱이 지금 내보내는 음(화음음·멜로디음·원곡 노래)과 같은 음이면서
     // 스피커에서 새어 들어오는 크기보다 크게 크지 않은 소리. 그 외엔 모두 내 목소리로 인정.
@@ -423,8 +427,12 @@ function frame() {
     if (toneMidi != null) outs.push(toneMidi);
     if (melMidi != null) outs.push(melMidi);
     if (ORIG() && ni >= 0) outs.push(current.notes[ni][2]);      // 원곡 가수 목소리 = 멜로디
-    const quiet = (mic.level || 0) < Math.max(0.006, (P.leak || 0) * 2.2);
+    // 한 음 안에서 이미 내 목소리로 인정됐으면(음 시작에 또렷하게 냈으면) 그 음이 끝날 때까지 기준을 낮춤 → 긴 음도 계속 인식
+    const locked = P.lock && P.lock.ni === ni && near(sung, P.lock.m);
+    const gate = locked ? Math.max(0.004, (P.leak || 0) * 1.1) : Math.max(0.006, (P.leak || 0) * 2.2);
+    const quiet = (mic.level || 0) < gate;
     if (quiet && outs.some((o) => near(sung, o))) sung = null;
+    else if (ni >= 0) P.lock = { ni, m: sung };
   }
   const nowMs = performance.now();
   if (sung != null) { P.hist.push(sung); if (P.hist.length > 5) P.hist.shift(); P.lastVoice = nowMs; }
