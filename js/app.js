@@ -414,12 +414,17 @@ function frame() {
   // 스피커 소리 크기 재기: 재생 시작 후 처음 ~0.9초(카운트·첫 화음음) 동안, 사용자가 조용할 때 마이크에 들어오는 소리
   if (mic && P.playing && P.calib && performance.now() - P.calib.t0 < 900) { P.calib.lv.push(mic.level || 0); }
   else if (P.calib && P.calib.lv.length) { const a = P.calib.lv.sort((x, y) => x - y); P.leak = a[Math.floor(a.length * 0.7)] || 0; P.calib = null; }
+  const rawSung = sung;
   if (sung != null && S.filter) {
-    const near = (a, b) => { let d = a - b; d -= 12 * Math.round(d / 12); return Math.abs(d) < 0.35; };
-    // 스피커에서 나온 멜로디음을 잡은 것 → 무시 (화음 목표와 다를 때만)
-    if (melMidi != null && near(sung, melMidi) && target != null && !near(sung, target)) sung = null;
-    // 스피커에서 새어 들어오는 크기보다 충분히 커야 내 목소리로 인정
-    else if ((mic.level || 0) < Math.max(0.008, (P.leak || 0) * 2.2)) sung = null;
+    // 버리는 건 딱 하나: 앱이 지금 내보내는 음(화음음·멜로디음·원곡 노래)과 같은 음이면서
+    // 스피커에서 새어 들어오는 크기보다 크게 크지 않은 소리. 그 외엔 모두 내 목소리로 인정.
+    const near = (a, b) => { let d = a - b; d -= 12 * Math.round(d / 12); return Math.abs(d) < 0.4; };
+    const outs = [];
+    if (toneMidi != null) outs.push(toneMidi);
+    if (melMidi != null) outs.push(melMidi);
+    if (ORIG() && ni >= 0) outs.push(current.notes[ni][2]);      // 원곡 가수 목소리 = 멜로디
+    const quiet = (mic.level || 0) < Math.max(0.006, (P.leak || 0) * 2.2);
+    if (quiet && outs.some((o) => near(sung, o))) sung = null;
   }
   const nowMs = performance.now();
   if (sung != null) { P.hist.push(sung); if (P.hist.length > 5) P.hist.shift(); P.lastVoice = nowMs; }
@@ -456,7 +461,7 @@ function frame() {
     const nx = TL.findIndex((n) => n[0] > t);
     hint.textContent = nx >= 0 && TL[nx][0] - t < 2.5 ? `${Math.ceil(TL[nx][0] - t)}…` : ORIG() ? '전주·간주' : '쉬는 구간';
   } else if (!mic) hint.textContent = `목표 ${noteLabel(target)} · 마이크 꺼짐`;
-  else if (sung == null) hint.textContent = `목표 ${noteLabel(target)} · 불러보세요`;
+  else if (sung == null) hint.textContent = `목표 ${noteLabel(target)} · ${mic.level > 0.004 && rawSung == null ? '소리가 작거나 음이 흐려요' : '불러보세요'}`;
   else hint.textContent = `목표 ${noteLabel(tgt)} · ${cents == null ? '' : (cents > 0 ? '+' : '') + Math.round(cents) + '센트'}`;
 
   renderLyrics(t, ni);
@@ -593,3 +598,4 @@ renderHome();
 // 점검용: 소리 상태 (개발자 도구에서 __hc() 로 확인)
 window.__hc = () => ({ ctx: actx && actx.state, harm: voice && voice.cur, harmGain: voice && +voice.g.gain.value.toFixed(3), mel: melVoice && melVoice.cur });
 window.__seek = (t) => { if (ORIG()) origEl.currentTime = t; else { P.t = t; P.baseT = t; P.base = performance.now(); } };
+window.__leak = () => P.leak;
