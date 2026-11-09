@@ -298,17 +298,22 @@ function setState(s) {
 let lastLineKey = '';
 function renderLyrics(t, ni) {
   const L = lyr.lines;
-  let li = L.findIndex((l) => ni >= l.from && ni <= l.to);
-  if (li < 0) li = L.findIndex((l) => TL[l.from][0] > t);   // 다음에 올 줄
+  // 지금(또는 방금) 부른 음: 줄 중간 쉼표에서도 그 줄을 유지
+  let k = ni;
+  if (k < 0) { k = -1; for (let i = 0; i < TL.length && TL[i][0] <= t; i++) k = i; }
+  let li = L.findIndex((l) => k >= l.from && k <= l.to);
+  // 줄의 마지막 음까지 끝났으면 다음 줄을 보여 줌
+  if (li >= 0 && k === L[li].to && t > TL[k][0] + TL[k][1]) li++;
+  if (li < 0) li = L.findIndex((l) => TL[l.from][0] > t);
   const line = L[li], next = L[li + 1];
-  const key = `${li}:${ni}`;
+  const key = `${li}:${k}:${ni >= 0}`;
   if (key === lastLineKey) return;
   lastLineKey = key;
   const nowEl = $('#lyNow'); nowEl.innerHTML = '';
   if (line) {
     // 지금 부르는 음절: ni 이하 중 가장 가까운 가사 음절
     let curSyl = -1;
-    if (ni >= line.from) for (let k = ni; k >= line.from; k--) if (current.notes[k][3]) { curSyl = k; break; }
+    if (k >= line.from) for (let j = Math.min(k, line.to); j >= line.from; j--) if (current.notes[j][3]) { curSyl = j; break; }
     line.words.forEach((w, wi) => {
       if (wi) nowEl.appendChild(document.createTextNode(' '));
       for (const { s, i } of w) {
