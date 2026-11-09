@@ -2,11 +2,28 @@
 const freqToMidi = (f) => 69 + 12 * Math.log2(f / 440);
 
 export class MicPitch {
-  async start(ctx, { aec = true } = {}) {
+  async start(ctx, { aec = true, phoneMic = true } = {}) {
     this.ctx = ctx;
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: aec, noiseSuppression: false, autoGainControl: false },
-    });
+    const base = { echoCancellation: aec, noiseSuppression: false, autoGainControl: false };
+    let deviceId;
+    if (phoneMic) {
+      // 블루투스 이어폰 마이크를 쓰면 폰이 '통화 모드'로 바뀌어 소리가 작고 탁해짐 → 폰 마이크를 고름
+      try {
+        let devs = await navigator.mediaDevices.enumerateDevices();
+        if (!devs.some((d) => d.kind === 'audioinput' && d.label)) {   // 처음엔 이름이 안 보여서 한 번 허용 받은 뒤 다시 확인
+          const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach((t) => t.stop());
+          devs = await navigator.mediaDevices.enumerateDevices();
+        }
+        const BT = /bluetooth|headset|hands[- ]?free|블루투스|핸즈프리|airpods|buds|shokz|aftershokz|openrun|wh-|wf-|bose|jabra|sco/i;
+        const ins = devs.filter((d) => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'communications');
+        const phone = ins.find((d) => /built-?in|internal|내장|phone|bottom|마이크|microphone/i.test(d.label) && !BT.test(d.label)) || ins.find((d) => d.deviceId !== 'default' && !BT.test(d.label));
+        const def = ins.find((d) => d.deviceId === 'default');
+        if (phone && (!def || BT.test(def.label) || def.groupId !== phone.groupId)) deviceId = phone.deviceId;
+        this.micName = (phone || def || {}).label || '';
+      } catch {}
+    }
+    this.stream = await navigator.mediaDevices.getUserMedia({ audio: deviceId ? { ...base, deviceId: { exact: deviceId } } : base })
+      .catch(() => navigator.mediaDevices.getUserMedia({ audio: base }));
     this.src = ctx.createMediaStreamSource(this.stream);
     this.an = ctx.createAnalyser();
     this.an.fftSize = 2048;

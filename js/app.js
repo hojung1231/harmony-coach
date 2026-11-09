@@ -11,10 +11,11 @@ const noteLabel = (m) => `${NAMES[pcOf(m)]}${Math.floor(Math.round(m) / 12) - 1}
 const fmt = (t) => `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, '0')}`;
 
 /* ---------- 설정 ---------- */
-const DEF = { tol: 50, octaveFree: true, view: 'arrow', vol: 0.15, melVol: 0.12, origVol: 0.8, filter: true, orig: false, speed: 1, mel: true, harm: 'third_up', tone: true };
+const DEF = { tol: 50, octaveFree: true, view: 'arrow', vol: 0.15, melVol: 0.12, origVol: 1.2, phoneMic: true, filter: true, orig: false, speed: 1, mel: true, harm: 'third_up', tone: true };
 let S = { ...DEF };
 try { S = { ...DEF, ...JSON.parse(localStorage.getItem('hc2') || '{}') }; } catch {}
 const save = () => { try { localStorage.setItem('hc2', JSON.stringify(S)); } catch {} };
+if (S.sv === 4) { S.origVol = Math.max(S.origVol ?? 0.8, 1.2); S.phoneMic = true; S.sv = 5; save(); }
 if (!S.sv || S.sv < 4) { S.vol = DEF.vol; S.melVol = DEF.melVol; S.origVol = DEF.origVol; S.filter = true; S.mel = S.mel ?? true; S.sv = 4; save(); }   // 2.4: 스피커 소리 걸러내기 기본 켬, 볼륨 세분화
 
 function toast(msg, ms = 2200) {
@@ -166,7 +167,11 @@ function getCtx() {
   try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch {}
   if (!actx) {
     actx = new (window.AudioContext || window.webkitAudioContext)(); voice = new Voice(actx, 'saw'); melVoice = new Voice(actx, 'sine');
-    try { const src = actx.createMediaElementSource(origEl); origGain = actx.createGain(); src.connect(origGain).connect(actx.destination); } catch {}
+    try {
+      const src = actx.createMediaElementSource(origEl); origGain = actx.createGain();
+      const lim = actx.createDynamicsCompressor(); lim.threshold.value = -6; lim.knee.value = 6; lim.ratio.value = 12; lim.attack.value = 0.003; lim.release.value = 0.2;
+      src.connect(origGain).connect(lim).connect(actx.destination);
+    } catch {}
     applyOrigVol();
   }
   if (actx.state !== 'running') actx.resume();
@@ -253,7 +258,7 @@ function stopPlay() {
 async function togglePlay() {
   getCtx();
   if (!mic) {
-    try { mic = new MicPitch(); await mic.start(actx, { aec: false }); }   // 폰 에코 제거는 긴 음을 지워 버려서 끔 — 앱이 직접 거름
+    try { mic = new MicPitch(); await mic.start(actx, { aec: false, phoneMic: S.phoneMic !== false }); }   // 폰 에코 제거는 긴 음을 지워 버려서 끔 — 앱이 직접 거름
     catch (err) { mic = null; toast('마이크를 허용해 주세요. 설정 → 앱 → 화음 코치 → 권한 → 마이크 → "앱 사용 중에만 허용"', 5000); }
     try { await actx.resume(); } catch {}   // 마이크 켤 때 소리가 멈추는 기기 대비
   }
@@ -342,7 +347,7 @@ function volButton(id, key, max, label, onTap) {
 }
 volButton('#plTone', 'vol', 0.6, '화음음', tapTone);
 volButton('#plMel', 'melVol', 0.6, '멜로디음', tapMel);
-volButton('#plOrig', 'origVol', 1, '원곡', tapOrig);
+volButton('#plOrig', 'origVol', 2, '원곡', tapOrig);
 document.querySelectorAll('#harmSeg button').forEach((b) => b.onclick = () => { S.harm = b.dataset.h; save(); syncButtons(); });
 function syncButtons() {
   for (const [id, on] of [['#plTone', S.tone], ['#plMel', S.mel], ['#plOrig', ORIG()]]) { $(id).classList.toggle('off', !on); $(id).setAttribute('aria-pressed', on); }
@@ -690,11 +695,12 @@ $('#rsAgain').onclick = () => openSong(current);
 /* ---------- 설정 ---------- */
 function renderSettings() {
   document.querySelectorAll('#tolSeg button').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.t === S.tol));
-  $('#setAec').checked = S.filter; $('#setOct').checked = S.octaveFree;
+  $('#setAec').checked = S.filter; $('#setPhoneMic').checked = S.phoneMic !== false; $('#setOct').checked = S.octaveFree;
   $('#appVer').textContent = APP_VERSION;
 }
 document.querySelectorAll('#tolSeg button').forEach((b) => b.onclick = () => { S.tol = +b.dataset.t; save(); renderSettings(); });
 $('#setOct').onchange = (e) => { S.octaveFree = e.target.checked; save(); };
+$('#setPhoneMic').onchange = (e) => { S.phoneMic = e.target.checked; save(); if (mic) { mic.stop(); mic = null; } toast('다음 재생부터 적용돼요'); };
 $('#setAec').onchange = (e) => { S.filter = e.target.checked; save(); if (mic) { mic.stop(); mic = null; } };
 // 앱을 닫거나 다른 앱으로 가면 마이크 끔 (돌아오면 다음 재생 때 다시 켬 — 권한은 다시 묻지 않음)
 document.addEventListener('visibilitychange', () => { if (document.hidden && mic) { if (P.playing) togglePlay(); mic.stop(); mic = null; } });
