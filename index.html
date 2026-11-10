@@ -51,7 +51,7 @@
         <div id="lyNext" class="next"></div>
       </div>
     </div>
-    <div class="bar"><div id="prog"></div></div>
+    <div class="seek" id="seek" role="slider" aria-label="재생 위치"><div class="bar"><div id="prog"></div></div><div id="thumb" class="thumb"></div></div>
     <div class="controls">
       <div class="seg" id="harmSeg">
         <button data-h="third_up" aria-pressed="true">3도 위</button>
@@ -67,8 +67,11 @@
         <button class="tg off" id="plOrig" aria-pressed="false">원곡+</button>
       </div>
       <div class="row">
-        <button class="round" id="plRestart" aria-label="처음부터">⏮</button>
+        <button class="round lbl" id="plRestart" aria-label="처음부터">처음</button>
+        <button class="round lbl" id="plPrevBar" aria-label="이전 마디">◀<br>마디</button>
         <button class="round big" id="plPlay" aria-label="재생">▶</button>
+        <button class="round lbl" id="plNextBar" aria-label="다음 마디">▶<br>마디</button>
+        <button class="round lbl" id="plSkip" aria-label="반주 넘기기">반주<br>넘기기</button>
       </div>
     </div>
   </section>
@@ -99,6 +102,8 @@
       <label class="chk"><input type="checkbox" id="setAec" />스피커 소리 걸러내기</label>
       <p class="small muted">켜면: 시작 카운트 때 스피커 소리 크기를 재고, 앱이 내는 음(화음음·멜로디음·원곡 노래)과 같은 음이면서 그 크기 정도인 소리는 판정에서 빼요. 음 시작을 또렷하게 내면 그 음이 끝날 때까지(긴 음도) 계속 인식해요. 시작 카운트 때는 조용히 해 주세요. 이어폰을 끼면 꺼도 돼요.</p>
       <button id="soundTest">🔊 소리 테스트</button>
+      <label class="field">소리·화면 싱크 <b id="syncN"></b><input type="range" id="setSync" min="-300" max="500" step="10" /></label>
+      <p class="small muted">블루투스 이어폰은 소리가 늦게 들려요. 앱이 지연을 자동으로 감지해 화면(가사·악보·판정)을 그만큼 늦추지만, 그래도 가사가 소리보다 <b>빨리</b> 지나가면 오른쪽(+), <b>늦게</b> 지나가면 왼쪽(−)으로 옮기세요.</p>
       <p class="small muted">음량: 연습 화면의 화음음·멜로디음·원곡 버튼을 누른 채 위로 끌면 커지고 아래로 끌면 작아져요. 한 번 누르면 켜기/끄기예요.</p>
       <p class="small muted">느리게 연습해도 화음음·멜로디음은 앱이 직접 만드는 소리라 음정이 그대로예요. 박자만 느려져요.</p>
       <button id="origClear">연결한 원곡 파일 지우기</button>

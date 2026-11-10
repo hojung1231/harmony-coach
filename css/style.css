@@ -43,6 +43,8 @@ hr { border: none; border-top: 1px solid var(--line); width: 100%; }
 .fb { position: fixed; inset: 0; background: transparent; transition: background-color 0.18s; z-index: 0; pointer-events: none; }
 .fb.up { background: var(--up); } .fb.down { background: var(--down); } .fb.ok { background: var(--ok); }
 header.clear { background: transparent; }
+header.clear .mono { font-size: 12px; white-space: nowrap; }
+header.clear h2 { min-width: 4.5em; }
 .stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; gap: 4px; padding: 0 18px; position: relative; z-index: 1; text-align: center; }
 .arrow { font-size: min(16vw, 72px); line-height: 1; height: 1.05em; font-weight: 900; text-shadow: 0 4px 24px rgba(0,0,0,.35); }
 .hint { font-size: 15px; color: rgba(255,255,255,.8); min-height: 1.4em; }
@@ -58,7 +60,13 @@ button.icon.sm + button.icon.sm { margin-left: 4px; }
 .lyric .now .cur { color: #ffe066; text-decoration: underline; text-underline-offset: 6px; }
 .lyric .now .todo { color: rgba(255,255,255,.45); }
 .lyric .next { font-size: 18px; color: rgba(255,255,255,.5); min-height: 1.3em; }
-.bar { height: 5px; background: rgba(255,255,255,.12); margin: 0 18px; border-radius: 3px; overflow: hidden; position: relative; z-index: 1; }
+.seek { position: relative; z-index: 1; margin: 0 18px; padding: 12px 0; touch-action: none; cursor: pointer; }
+.bar { height: 6px; background: rgba(255,255,255,.14); border-radius: 3px; overflow: hidden; }
+.thumb { position: absolute; top: 50%; left: 0; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); pointer-events: none; }
+.seek.drag .thumb { transform: scale(1.4); }
+.round.lbl { width: 54px; height: 54px; font-size: 12px; font-weight: 700; line-height: 1.15; }
+.round.hot { background: #ffe066; border-color: #ffe066; color: #1b2033; }
+.controls .row { gap: 8px; }
 .bar div { height: 100%; width: 0; background: rgba(255,255,255,.7); }
 .controls { display: flex; flex-direction: column; gap: 10px; padding: 10px 16px calc(20px + env(safe-area-inset-bottom)); position: relative; z-index: 1; }
 .round { width: 58px; height: 58px; border-radius: 50%; padding: 0; font-size: 22px; background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.15); }

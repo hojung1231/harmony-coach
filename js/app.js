@@ -11,7 +11,7 @@ const noteLabel = (m) => `${NAMES[pcOf(m)]}${Math.floor(Math.round(m) / 12) - 1}
 const fmt = (t) => `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, '0')}`;
 
 /* ---------- 설정 ---------- */
-const DEF = { tol: 50, octaveFree: true, view: 'arrow', vol: 0.15, melVol: 0.12, origVol: 1.2, phoneMic: true, filter: true, orig: false, speed: 1, mel: true, harm: 'third_up', tone: true };
+const DEF = { tol: 50, octaveFree: true, sync: 0, view: 'arrow', vol: 0.15, melVol: 0.12, origVol: 1.2, phoneMic: true, filter: true, orig: false, speed: 1, mel: true, harm: 'third_up', tone: true };
 let S = { ...DEF };
 try { S = { ...DEF, ...JSON.parse(localStorage.getItem('hc2') || '{}') }; } catch {}
 const save = () => { try { localStorage.setItem('hc2', JSON.stringify(S)); } catch {} };
@@ -271,7 +271,49 @@ async function togglePlay() {
   }
 }
 $('#plPlay').onclick = togglePlay;
-$('#plRestart').onclick = () => { P.t = 0; P.baseT = 0; P.base = performance.now(); P.hit = 0; P.tot = 0; P.trace = []; origEl.currentTime = 0; };
+/* ---------- 이동: 재생 바, 이전/다음 마디, 반주 넘기기 ---------- */
+function outLat() {
+  let l = actx ? (actx.outputLatency || 0) + (actx.baseLatency || 0) : 0;
+  if (!(l >= 0) || l > 0.6) l = 0;                      // 이상한 값은 무시
+  return Math.max(-0.3, Math.min(0.9, l + (S.sync || 0) / 1000));
+}
+function seekTo(t) {
+  t = Math.max(0, Math.min(P.end - 0.3, t));
+  if (ORIG()) origEl.currentTime = t; else { P.t = t; P.baseT = t; P.base = performance.now(); }
+  P.trace = []; P.hist = []; P.raw = []; P.jit = []; P.lock = null; lastLineKey = '';
+}
+let seeking = false;
+(() => {
+  const bar = $('#seek');
+  const at = (e) => { const r = bar.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); };
+  const show = (f) => { $('#prog').style.width = `${f * 100}%`; $('#thumb').style.left = `${f * 100}%`; $('#plTime').textContent = `${fmt((f * P.end) / rate())} / ${fmt(P.end / rate())}`; };
+  bar.addEventListener('pointerdown', (e) => { seeking = true; bar.setPointerCapture(e.pointerId); bar.classList.add('drag'); show(at(e)); });
+  bar.addEventListener('pointermove', (e) => { if (seeking) show(at(e)); });
+  const end = (e) => { if (!seeking) return; seeking = false; bar.classList.remove('drag'); seekTo(at(e) * P.end); };
+  bar.addEventListener('pointerup', end); bar.addEventListener('pointercancel', () => { seeking = false; bar.classList.remove('drag'); });
+})();
+function barJump(dir) {
+  const t = now(), bars = current.bars;
+  if (!bars || !bars.length || current.notes[0][4] == null) return seekTo(t + dir * 4);
+  const pos = eighthAt(t);
+  let dest;
+  if (dir < 0) { const c = bars.filter((b) => b <= pos - 2); dest = c.length ? c[c.length - 1] : null; }   // 마디 초반(약 0.5초 이내)이면 그 앞 마디로
+  else dest = bars.find((b) => b > pos + 0.05);
+  if (dest == null) { if (dir > 0) return toast('마지막 마디예요', 900); const first = Math.max(0, TL[0][0] - 2); return seekTo(t > first + 0.5 ? first : 0); }   // 첫 마디에서는 노래 시작 직전으로
+  seekTo(timeAtEighth(dest));
+}
+$('#plPrevBar').onclick = () => barJump(-1);
+$('#plNextBar').onclick = () => barJump(1);
+$('#plSkip').onclick = () => {
+  const t = now();
+  // 지금 위치 뒤에서, 3초 이상 노래가 비었다가 다시 시작하는 곳(= 전주·간주가 끝나는 곳)
+  let j = -1;
+  for (let i = 0; i < TL.length; i++) { if (TL[i][0] <= t + 2.2) continue; const gap = i === 0 ? TL[0][0] : TL[i][0] - (TL[i - 1][0] + TL[i - 1][1]); if (gap >= 3) { j = i; break; } }
+  if (j < 0) return toast('건너뛸 반주가 없어요', 1200);
+  seekTo(TL[j][0] - 2);
+  toast('반주를 건너뛰었어요', 900);
+};
+$('#plRestart').onclick = () => { P.hit = 0; P.tot = 0; seekTo(0); };
 const tapTone = () => { S.tone = !S.tone; save(); syncButtons(); toast(S.tone ? '화음음 켬' : '화음음 끔', 900); };
 const tapMel = () => { S.mel = !S.mel; save(); syncButtons(); toast(S.mel ? '멜로디음 켬' : '멜로디음 끔', 900); };
 document.querySelectorAll('#speedSeg button').forEach((b) => b.onclick = () => {
@@ -405,23 +447,28 @@ function renderLyrics(t, ni) {
 }
 
 function frame() {
-  const t = now();
-  if (P.playing && t >= P.end) { finish(); return; }
-  const ni = noteIndexAt(t);
+  const tA = now();                                  // 앱이 지금 '내보내는' 소리의 시간
+  if (P.playing && tA >= P.end) { finish(); return; }
+  // 귀에 '들리는' 시간: 블루투스 이어폰 등은 소리가 늦게 도착 → 화면·판정은 그만큼 늦춰서 소리와 맞춤
+  const t = tA - outLat() * (ORIG() ? 1 : rate());
+  const niA = noteIndexAt(tA), ni = noteIndexAt(t);
   const harm = current.harmony[S.harm];
   const target = ni >= 0 ? harm[ni] : null;
 
   // 시작 전 카운트 (박마다 '틱')
-  if (P.playing && !ORIG() && current.eighth && t < TL[0][0]) {
-    const beat = Math.floor(t / (current.eighth * 3));
+  if (P.playing && !ORIG() && current.eighth && tA < TL[0][0]) {
+    const beat = Math.floor(tA / (current.eighth * 3));
     if (beat !== P.lastBeat) { P.lastBeat = beat; Voice.blip(actx, 84); }
   } else P.lastBeat = -1;
   // 화음음: 계속 들려줌. 시작 카운트 동안엔 첫 화음음을 미리 들려줘서 첫 음을 잡게 함
-  const preRoll = P.playing && !ORIG() && t < TL[0][0];
-  const toneMidi = !P.playing || !S.tone ? null : preRoll ? (t > TL[0][0] - 1.0 ? harm[0] : null) : target;
+  const preRoll = P.playing && !ORIG() && tA < TL[0][0];
+  const toneMidi = !P.playing || !S.tone ? null : preRoll ? (tA > TL[0][0] - 1.0 ? harm[0] : null) : (niA >= 0 ? harm[niA] : null);
   if (voice) voice.set(toneMidi, S.vol);
-  const melMidi = P.playing && S.mel && ni >= 0 ? current.notes[ni][2] : null;
+  const melMidi = P.playing && S.mel && niA >= 0 ? current.notes[niA][2] : null;
   if (melVoice) melVoice.set(melMidi, S.melVol);
+  // 반주(전주·간주) 구간이면 '반주 넘기기' 버튼 강조
+  const nxA = TL.findIndex((n) => n[0] > tA);
+  $('#plSkip').classList.toggle('hot', niA < 0 && nxA >= 0 && TL[nxA][0] - tA > 4);
 
   // 내 목소리 (반응 시간 0.12초 감안)
   let sung = mic ? mic.read() : null;
@@ -543,8 +590,8 @@ function frame() {
 
   renderLyrics(t, ni);
   if (S.view === 'graph') drawPitchGraph(t, ni); else drawStaff(t, ni);
-  $('#plTime').textContent = `${fmt(t / rate())} / ${fmt(P.end / rate())}${rate() !== 1 ? ' · ' + rate() + '배' : ''}${ORIG() ? ' · 원곡' : ''}`;
-  $('#prog').style.width = `${Math.min(100, (t / P.end) * 100)}%`;
+  $('#plTime').textContent = `${fmt(tA / rate())} / ${fmt(P.end / rate())}${rate() !== 1 ? ' · ' + rate() + '배' : ''}`;
+  if (!seeking) { const pc = Math.min(100, Math.max(0, (tA / P.end) * 100)); $('#prog').style.width = `${pc}%`; $('#thumb').style.left = `${pc}%`; }
   raf = requestAnimationFrame(frame);
 }
 
@@ -697,8 +744,14 @@ function renderSettings() {
   document.querySelectorAll('#tolSeg button').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.t === S.tol));
   $('#setAec').checked = S.filter; $('#setPhoneMic').checked = S.phoneMic !== false; $('#setOct').checked = S.octaveFree;
   $('#appVer').textContent = APP_VERSION;
+  $('#setSync').value = S.sync || 0; syncLabel();
 }
 document.querySelectorAll('#tolSeg button').forEach((b) => b.onclick = () => { S.tol = +b.dataset.t; save(); renderSettings(); });
+function syncLabel() {
+  const auto = actx ? Math.round(((actx.outputLatency || 0) + (actx.baseLatency || 0)) * 1000) : null, v = S.sync || 0;
+  $('#syncN').textContent = `${v > 0 ? '+' : ''}${v}ms` + (auto != null ? ` (자동 감지한 소리 지연 ${auto}ms에 더함)` : '');
+}
+$('#setSync').oninput = (e) => { S.sync = +e.target.value; save(); syncLabel(); };
 $('#setOct').onchange = (e) => { S.octaveFree = e.target.checked; save(); };
 $('#setPhoneMic').onchange = (e) => { S.phoneMic = e.target.checked; save(); if (mic) { mic.stop(); mic = null; } toast('다음 재생부터 적용돼요'); };
 $('#setAec').onchange = (e) => { S.filter = e.target.checked; save(); if (mic) { mic.stop(); mic = null; } };
@@ -735,7 +788,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 renderHome();
 // 점검용: 소리 상태 (개발자 도구에서 __hc() 로 확인)
 window.__hc = () => ({ ctx: actx && actx.state, harm: voice && voice.cur, harmGain: voice && +voice.g.gain.value.toFixed(3), mel: melVoice && melVoice.cur, melGain: melVoice && +melVoice.g.gain.value.toFixed(3), vol: S.vol, melVol: S.melVol });
-window.__seek = (t) => { if (ORIG()) origEl.currentTime = t; else { P.t = t; P.baseT = t; P.base = performance.now(); } };
+window.__seek = (t) => seekTo(t);
 window.__leak = () => ({ noise: P.noise, leakPerAmp: P.leakPerAmp });
 
 window.__dbgAudio = () => ({ actx, origEl, origGain, now: now(), pos: current ? eighthAt(now()) : 0, mel: melVoice && melVoice.cur, playing: P.playing, orig: ORIG() });
