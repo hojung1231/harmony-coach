@@ -25,13 +25,23 @@ function toast(msg, ms = 2200) {
 
 /* ---------- 화면 전환 ---------- */
 let raf = 0;
-function show(id) {
+let skipPop = false;
+function show(id, fromPop) {
   cancelAnimationFrame(raf);
   if (id !== 'play') stopPlay();
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
   if (id === 'home') renderHome();
   if (id === 'settings') renderSettings();
+  // 폰의 '뒤로' 버튼: 안쪽 화면에서는 앱이 꺼지지 않고 곡 목록(홈)으로
+  if (!fromPop) {
+    const inner = history.state && history.state.hc;
+    if (id === 'home') { if (inner) { skipPop = true; history.back(); } }
+    else if (inner) history.replaceState({ hc: id }, '');
+    else history.pushState({ hc: id }, '');
+  }
 }
+window.addEventListener('popstate', () => { if (skipPop) { skipPop = false; return; } show('home', true); });
+if (history.state && history.state.hc) history.replaceState(null, '');   // 새로고침 뒤 남은 기록 정리
 document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => show(b.dataset.go)));
 
 /* ---------- 가사 → 음절 ---------- */
