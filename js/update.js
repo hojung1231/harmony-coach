@@ -1,5 +1,5 @@
 // 앱 업데이트 확인 / 적용
-export const APP_VERSION = '2.6.1';
+export const APP_VERSION = '2.6.2';
 
 const ASSETS = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/pitch.js', 'js/db.js', 'js/update.js',
   'songs/sooknyeo.json', 'manifest.webmanifest', 'sw.js'];

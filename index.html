@@ -22,7 +22,37 @@
         <button class="primary" id="updateNow">업데이트</button>
       </div>
       <div id="songList" class="list"></div>
-      <label class="add">＋ 곡 파일 추가<input type="file" id="songFile" accept=".json,application/json" hidden /></label>
+      <button class="add" data-go="add">＋ 새 곡 추가</button>
+    </div>
+  </section>
+
+  <!-- 새 곡 추가: 필요한 것 3가지 -->
+  <section class="screen" id="add">
+    <header><button class="icon" data-go="home" aria-label="뒤로">←</button><h2>새 곡 추가</h2></header>
+    <div class="content">
+      <p class="muted">곡 하나에 필요한 건 아래 3가지예요.</p>
+      <div class="need">
+        <div class="num">1</div>
+        <div class="body">
+          <div class="head"><b>곡 파일</b><span class="badge must">필수</span></div>
+          <p class="small muted">악보의 멜로디·박자·화음이 담긴 <b>.json</b> 파일이에요. 앱이 악보를 직접 읽지는 못해서, 악보(PDF나 사진)를 Claude에게 보내 이 파일로 만들어 받아야 해요.</p>
+          <label class="primary filebtn">곡 파일 고르기<input type="file" id="songFile" accept=".json,application/json" hidden /></label>
+        </div>
+      </div>
+      <div class="need">
+        <div class="num">2</div>
+        <div class="body">
+          <div class="head"><b>가사</b><span class="badge must">필수</span></div>
+          <p class="small muted">곡 파일을 고르면 바로 다음 화면에서 붙여넣어요. 멜론·지니에서 복사한 그대로 넣으면 돼요.</p>
+        </div>
+      </div>
+      <div class="need">
+        <div class="num">3</div>
+        <div class="body">
+          <div class="head"><b>원곡 음원</b><span class="badge opt">선택</span></div>
+          <p class="small muted">원곡을 들으며 연습하려면 폰에 있는 mp3 파일이 필요해요. 연습 화면의 <b>원곡+</b> 버튼으로 연결해요. 없어도 화음음·멜로디음으로 연습할 수 있어요.</p>
+        </div>
+      </div>
     </div>
   </section>
 

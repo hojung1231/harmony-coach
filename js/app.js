@@ -110,9 +110,12 @@ async function renderHome() {
   for (const s of await allSongs()) {
     const el = document.createElement('div');
     el.className = 'song';
-    el.innerHTML = '<div><div class="t"></div><div class="s"></div></div><div class="go">▶</div>';
+    el.innerHTML = '<div><div class="t"></div><div class="s"></div><div class="chips"></div></div><div class="go">▶</div>';
     el.querySelector('.t').textContent = s.title;
     el.querySelector('.s').textContent = `${s.artist || ''}${s.key ? ' · ' + s.key : ''}${s.builtin ? ' · 기본곡' : ''}`;
+    // 준비 상태: 가사(필수) · 원곡(선택)
+    const hasLy = !!(await lyricsOf(s)), hasAu = !!(await db.get('audio:' + s.id));
+    el.querySelector('.chips').innerHTML = `<span class="chip ${hasLy ? 'ok' : 'no'}">${hasLy ? '가사 ✓' : '가사 필요'}</span><span class="chip ${hasAu ? 'ok' : ''}">${hasAu ? '원곡 ✓' : '원곡 없음(선택)'}</span>`;
     el.onclick = () => openSong(s);
     box.appendChild(el);
   }
@@ -126,8 +129,8 @@ $('#songFile').addEventListener('change', async (e) => {
     s.id = s.id && s.id !== 'builtin-sooknyeo' ? s.id : `song-${Date.now()}`;
     s.builtin = false;
     await db.put(s);
-    toast(`'${s.title}'을(를) 추가했어요`);
-    renderHome();
+    toast(`'${s.title}' 곡 파일을 추가했어요. 이제 가사를 넣어 주세요.`, 2500);
+    openSong(s);   // 바로 2단계(가사)로
   } catch (err) { toast('추가 실패: ' + err.message, 3500); }
 });
 

@@ -85,3 +85,16 @@ button.icon.sm { font-size: 14px; font-weight: 700; border: 1px solid rgba(255,2
 .volpop .track { width: 26px; height: 150px; border-radius: 13px; background: rgba(255,255,255,.12); position: relative; overflow: hidden; }
 .volpop .track div { position: absolute; left: 0; right: 0; bottom: 0; background: var(--accent); }
 .volpop b { font-size: 20px; font-variant-numeric: tabular-nums; }
+button.add { width: 100%; font-size: 16px; }
+.need { display: flex; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+.need .num { flex: 0 0 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.need .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.need .head { display: flex; align-items: center; gap: 8px; font-size: 17px; }
+.badge { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+.badge.must { background: rgba(255,92,108,.18); color: #ff8a96; }
+.badge.opt { background: rgba(255,255,255,.1); color: var(--muted); }
+.filebtn { display: block; text-align: center; background: var(--accent); color: #fff; font-weight: 700; border-radius: 12px; padding: 12px; cursor: pointer; }
+.song .chips { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
+.chip.ok { border-color: rgba(61,220,132,.5); color: #3ddc84; }
+.chip.no { border-color: rgba(255,92,108,.5); color: #ff8a96; }
