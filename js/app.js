@@ -738,3 +738,4 @@ window.__hc = () => ({ ctx: actx && actx.state, harm: voice && voice.cur, harmGa
 window.__seek = (t) => { if (ORIG()) origEl.currentTime = t; else { P.t = t; P.baseT = t; P.base = performance.now(); } };
 window.__leak = () => ({ noise: P.noise, leakPerAmp: P.leakPerAmp });
 
+window.__dbgAudio = () => ({ actx, origEl, origGain, now: now(), pos: current ? eighthAt(now()) : 0, mel: melVoice && melVoice.cur, playing: P.playing, orig: ORIG() });
