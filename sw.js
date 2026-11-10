@@ -1,5 +1,5 @@
 // 오프라인 캐시 (네트워크 우선, 실패 시 캐시)
-const CACHE = 'harmony-coach-2.6.2';
+const CACHE = 'harmony-coach-2.7.0';
 const ASSETS = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/pitch.js', 'js/db.js', 'js/update.js',
   'songs/sooknyeo.json', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS))); self.skipWaiting(); });

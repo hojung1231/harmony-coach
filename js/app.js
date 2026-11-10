@@ -1,6 +1,6 @@
 // 화음 코치 2.0 — 악보 기반 화음 연습 (원곡 없이 화음음 + 가사)
 import * as db from './db.js';
-import { MicPitch, Voice } from './pitch.js';
+import { MicPitch, Voice, PATCHES } from './pitch.js';
 import { APP_VERSION, checkUpdate, applyUpdate } from './update.js';
 
 const $ = (s) => document.querySelector(s);
@@ -11,7 +11,7 @@ const noteLabel = (m) => `${NAMES[pcOf(m)]}${Math.floor(Math.round(m) / 12) - 1}
 const fmt = (t) => `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, '0')}`;
 
 /* ---------- 설정 ---------- */
-const DEF = { tol: 50, octaveFree: true, sync: 0, view: 'arrow', vol: 0.15, melVol: 0.12, origVol: 1.2, phoneMic: true, filter: true, orig: false, speed: 1, mel: true, harm: 'third_up', tone: true };
+const DEF = { tol: 50, octaveFree: true, patch: 'piano', toneOct: false, sync: 0, view: 'arrow', vol: 0.15, melVol: 0.12, origVol: 1.2, phoneMic: true, filter: true, orig: false, speed: 1, mel: true, harm: 'third_up', tone: true };
 let S = { ...DEF };
 try { S = { ...DEF, ...JSON.parse(localStorage.getItem('hc2') || '{}') }; } catch {}
 const save = () => { try { localStorage.setItem('hc2', JSON.stringify(S)); } catch {} };
@@ -179,7 +179,7 @@ function getCtx() {
   // 아이폰: 무음 모드에서도 소리 나게 + 마이크와 함께 쓰기
   try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch {}
   if (!actx) {
-    actx = new (window.AudioContext || window.webkitAudioContext)(); voice = new Voice(actx, 'saw'); melVoice = new Voice(actx, 'sine');
+    actx = new (window.AudioContext || window.webkitAudioContext)(); voice = new Voice(actx, S.patch || 'piano'); melVoice = new Voice(actx, 'mel');
     try {
       const src = actx.createMediaElementSource(origEl); origGain = actx.createGain();
       const lim = actx.createDynamicsCompressor(); lim.threshold.value = -6; lim.knee.value = 6; lim.ratio.value = 12; lim.attack.value = 0.003; lim.release.value = 0.2;
@@ -354,6 +354,28 @@ $('#origFile').addEventListener('change', async (e) => {
 });
 origEl.addEventListener('ended', () => { if (P.playing && ORIG()) finish(); });
 $('#plBack').onclick = () => show('home');
+/* ---------- 화음 가이드음 음색 고르기 ---------- */
+function renderPatches() {
+  const box = $('#patchList'); box.innerHTML = '';
+  for (const [id, pt] of Object.entries(PATCHES)) {
+    if (pt.hidden) continue;
+    const b = document.createElement('button');
+    b.className = 'patch' + ((S.patch || 'piano') === id ? ' sel' : '');
+    b.innerHTML = '<b></b><span></span>'; b.firstChild.textContent = pt.label; b.lastChild.textContent = pt.desc;
+    b.onclick = () => { S.patch = id; save(); getCtx(); voice.setPatch(id); renderPatches(); if (!P.playing) previewTone(); };
+    box.appendChild(b);
+  }
+  $('#toneOct').checked = !!S.toneOct;
+}
+let pvT = [];
+function previewTone() {
+  getCtx(); pvT.forEach(clearTimeout); const o = S.toneOct ? 12 : 0;
+  pvT = [[57, 0], [61, 420], [64, 840], [61, 1260]].map(([m, d], i) => setTimeout(() => voice.set(m + o, S.vol, 'pv' + i), d));
+  pvT.push(setTimeout(() => { if (!P.playing) voice.off(); }, 2000));
+}
+$('#plPatch').onclick = () => { const v = $('#patchPanel'); v.hidden = !v.hidden; if (!v.hidden) renderPatches(); };
+$('#patchClose').onclick = () => { $('#patchPanel').hidden = true; };
+$('#toneOct').onchange = (e) => { S.toneOct = e.target.checked; save(); if (!P.playing) previewTone(); };
 function applyView() {
   const g = S.view === 'graph';
   $('#play').classList.toggle('graph-mode', g);
@@ -476,9 +498,11 @@ function frame() {
   // 화음음: 계속 들려줌. 시작 카운트 동안엔 첫 화음음을 미리 들려줘서 첫 음을 잡게 함
   const preRoll = P.playing && !ORIG() && tA < TL[0][0];
   const toneMidi = !P.playing || !S.tone ? null : preRoll ? (tA > TL[0][0] - 1.0 ? harm[0] : null) : (niA >= 0 ? harm[niA] : null);
-  if (voice) voice.set(toneMidi, S.vol);
+  // 음표 번호: 같은 음이 이어져도 새 음절이면 다시 침 (이음줄로 끄는 음은 그대로 이어짐)
+  let nk = niA; while (nk > 0 && !current.notes[nk][3] && current.notes[nk][2] === current.notes[nk - 1][2] && TL[nk][0] - (TL[nk - 1][0] + TL[nk - 1][1]) < 0.05) nk--;
+  if (voice) voice.set(toneMidi == null ? null : toneMidi + (S.toneOct ? 12 : 0), S.vol, preRoll ? -1 : nk);
   const melMidi = P.playing && S.mel && niA >= 0 ? current.notes[niA][2] : null;
-  if (melVoice) melVoice.set(melMidi, S.melVol);
+  if (melVoice) melVoice.set(melMidi, S.melVol, nk);
   // 반주(전주·간주) 구간이면 '반주 넘기기' 버튼 강조
   const nxA = TL.findIndex((n) => n[0] > tA);
   $('#plSkip').classList.toggle('hot', niA < 0 && nxA >= 0 && TL[nxA][0] - tA > 4);
@@ -772,7 +796,7 @@ $('#setAec').onchange = (e) => { S.filter = e.target.checked; save(); if (mic) {
 document.addEventListener('visibilitychange', () => { if (document.hidden && mic) { if (P.playing) togglePlay(); mic.stop(); mic = null; } });
 $('#soundTest').onclick = () => {
   getCtx();
-  voice.set(57, S.vol); setTimeout(() => voice.set(61, S.vol), 400); setTimeout(() => voice.set(64, S.vol), 800); setTimeout(() => voice.off(), 1300);
+  previewTone();
   toast('라·도#·미 소리가 들리면 정상이에요. 안 들리면 미디어 볼륨과 무음 모드를 확인하세요.', 3500);
 };
 $('#origClear').onclick = async () => {

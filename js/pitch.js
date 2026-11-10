@@ -93,9 +93,20 @@ export class MicPitch {
   }
 }
 
-// 기준음/멜로디음 신스
+// 화음 가이드음 / 멜로디음 신스
+// 음색: MR·가수 목소리 사이에서도 구별되도록 — 때리는 소리(어택), 목소리 위 음역, 목소리와 다른 배음 구조
+export const PATCHES = {
+  piano:   { label: '피아노', desc: '톡 치고 서서히 줄어듦 · 음이 바뀌는 순간이 또렷', parts: [{ wave: [1, 0.55, 0.38, 0.22, 0.14, 0.09, 0.05, 0.03], ratio: 1, lv: 1 }], A: 0.004, D: 0.4, S: 0.22, lp: 5200, amp: 1.5 },
+  bell:    { label: '벨', desc: '한 옥타브 위에서 맑게 울림 · 목소리 위로 가장 잘 빠져나옴', parts: [{ type: 'sine', ratio: 2, lv: 0.8 }, { type: 'sine', ratio: 5.52, lv: 0.28 }, { type: 'sine', ratio: 10.8, lv: 0.12 }], A: 0.003, D: 0.45, S: 0.14, lp: 9000, amp: 1.4 },
+  marimba: { label: '마림바', desc: '짧게 톡 · 내 목소리를 가장 덜 가림', parts: [{ type: 'sine', ratio: 1, lv: 1 }, { type: 'sine', ratio: 4, lv: 0.22 }], A: 0.002, D: 0.14, S: 0.1, lp: 7000, amp: 2.0 },
+  organ:   { label: '오르간', desc: '끝까지 일정하게 이어짐 · 긴 음을 맞추기 좋음', parts: [{ wave: [1, 0.8, 0.55, 0.45, 0, 0.3, 0, 0.22], ratio: 1, lv: 1 }], A: 0.012, D: 0.1, S: 0.9, lp: 6000, amp: 0.8 },
+  whistle: { label: '휘슬', desc: '한 옥타브 위의 깨끗한 소리 · 끝까지 이어짐', parts: [{ type: 'sine', ratio: 2, lv: 1 }, { type: 'sine', ratio: 4, lv: 0.1 }], A: 0.03, D: 0.1, S: 1, lp: 9000, amp: 0.65 },
+  saw:     { label: '신스(기존)', desc: '이전 버전의 소리 · 목소리와 비슷해 섞이기 쉬움', parts: [{ type: 'sawtooth', ratio: 1, lv: 0.55 }], A: 0.02, D: 0.1, S: 1, lp: 2600, amp: 1.0 },
+  mel:     { hidden: true, label: '멜로디', parts: [{ type: 'square', ratio: 1, lv: 0.5 }], A: 0.02, D: 0.1, S: 1, lp: 2000, amp: 1.0 },
+};
+
 export class Voice {
-  constructor(ctx, type = 'triangle') {
+  constructor(ctx, patch = 'piano') {
     this.ctx = ctx;
     if (!ctx._master) {
       // 공용 출력: 압축기로 크게, 찌그러지지 않게
@@ -105,29 +116,43 @@ export class Voice {
       master.connect(comp).connect(ctx.destination);
       ctx._master = master;
     }
-    this.osc = ctx.createOscillator();
-    this.osc.type = type === 'sine' ? 'square' : 'sawtooth';   // 배음이 있어야 폰 스피커로도 들림 (멜로디=사각파, 화음=톱니파)
-    this.lp = ctx.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.frequency.value = type === 'sine' ? 2000 : 2600;
-    this.g = ctx.createGain();
-    this.g.gain.value = 0;
-    this.osc.connect(this.lp).connect(this.g).connect(ctx._master);
-    this.osc.start();
-    this.cur = null;
+    this.env = ctx.createGain(); this.env.gain.value = 0;      // 음마다의 세기 변화(어택·감쇠)
+    this.lp = ctx.createBiquadFilter(); this.lp.type = 'lowpass';
+    this.g = ctx.createGain(); this.g.gain.value = 0;          // 음량
+    this.env.connect(this.lp).connect(this.g).connect(ctx._master);
+    this.slots = [0, 1, 2].map(() => { const o = ctx.createOscillator(), pg = ctx.createGain(); pg.gain.value = 0; o.connect(pg).connect(this.env); o.start(); return { o, pg }; });
+    this.cur = null; this.key = null;
+    this.setPatch(patch);
   }
-  set(midi, vol) {
-    const t = this.ctx.currentTime;
+  setPatch(name) {
+    const P = PATCHES[name] || PATCHES.piano; this.patch = P; this.patchName = name;
+    this.lp.frequency.value = P.lp;
+    this.slots.forEach((sl, i) => {
+      const part = P.parts[i];
+      if (!part) { sl.pg.gain.value = 0; return; }
+      if (part.wave) { const n = part.wave.length + 1, re = new Float32Array(n), im = new Float32Array(n); part.wave.forEach((v, k) => (im[k + 1] = v)); sl.o.setPeriodicWave(this.ctx.createPeriodicWave(re, im)); }
+      else sl.o.type = part.type;
+      sl.pg.gain.value = part.lv;
+    });
+    this.cur = null; this.key = null;     // 다음 음부터 새 음색으로 다시 울림
+  }
+  /** midi: 낼 음(null=끔), vol: 음량, key: 음표 번호(같은 음이 이어져도 음표가 바뀌면 다시 침) */
+  set(midi, vol, key = null) {
+    const t = this.ctx.currentTime, P = this.patch;
     if (midi == null || !vol) {
-      if (this.cur !== null) this.g.gain.setTargetAtTime(0, t, 0.03);
-      this.cur = null;
+      if (this.cur !== null) { this.env.gain.cancelScheduledValues(t); this.env.gain.setTargetAtTime(0, t, 0.03); }
+      this.cur = null; this.key = null;
       return;
     }
-    if (midi !== this.cur) {
-      this.osc.frequency.setValueAtTime(440 * Math.pow(2, (midi - 69) / 12), t);
-      this.g.gain.cancelScheduledValues(t);
-      this.g.gain.setValueAtTime(0, t);
-      this.g.gain.linearRampToValueAtTime(vol, t + 0.02);
-      this.cur = midi;
-    } else this.g.gain.setTargetAtTime(vol, t, 0.05);
+    this.g.gain.setTargetAtTime(vol * P.amp, t, 0.03);
+    if (midi !== this.cur || key !== this.key) {
+      const f = 440 * Math.pow(2, (midi - 69) / 12);
+      this.slots.forEach((sl, i) => { if (P.parts[i]) sl.o.frequency.setValueAtTime(f * P.parts[i].ratio, t); });
+      const e = this.env.gain;
+      e.cancelScheduledValues(t); e.setValueAtTime(Math.min(e.value, 0.3), t);
+      e.linearRampToValueAtTime(1, t + P.A); e.setTargetAtTime(P.S, t + P.A, P.D);
+      this.cur = midi; this.key = key;
+    }
   }
   off() { this.set(null, 0); }
   /** 짧은 소리 (카운트·테스트용) */

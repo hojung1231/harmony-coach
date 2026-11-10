@@ -70,7 +70,13 @@
   <!-- 연습 -->
   <section class="screen" id="play">
     <div id="fb" class="fb"></div>
-    <header class="clear"><button class="icon" id="plBack" aria-label="뒤로">←</button><h2 id="plTitle"></h2><span id="plTime" class="mono"></span><button class="icon sm" id="plView" aria-label="그래프 모드로 바꾸기">그래프</button><button class="icon sm" id="plLyrics" aria-label="가사 고치기">가사</button></header>
+    <header class="clear"><button class="icon" id="plBack" aria-label="뒤로">←</button><h2 id="plTitle"></h2><button class="icon sm" id="plPatch" aria-label="가이드음 음색 고르기">음색</button><button class="icon sm" id="plView" aria-label="그래프 모드로 바꾸기">그래프</button><button class="icon sm" id="plLyrics" aria-label="가사 고치기">가사</button></header>
+    <div id="patchPanel" class="sheet" hidden>
+      <div class="sheethead"><b>화음 가이드음 음색</b><button class="icon" id="patchClose" aria-label="닫기">✕</button></div>
+      <p class="small muted">재생 중에 눌러서 원곡·내 목소리 사이에서 어떤 소리가 잘 들리는지 바로 비교해 보세요.</p>
+      <div id="patchList" class="patches"></div>
+      <label class="chk"><input type="checkbox" id="toneOct" />한 옥타브 위로 (목소리와 겹치면 켜 보세요)</label>
+    </div>
     <div class="stage">
       <div id="arrow" class="arrow"></div>
       <div id="hint" class="hint"></div>
@@ -81,6 +87,7 @@
         <div id="lyNext" class="next"></div>
       </div>
     </div>
+    <div class="timeRow"><span id="plTime" class="mono"></span></div>
     <div class="seek" id="seek" role="slider" aria-label="재생 위치"><div class="bar"><div id="prog"></div></div><div id="thumb" class="thumb"></div></div>
     <div class="controls">
       <div class="seg" id="harmSeg">
