@@ -91,9 +91,21 @@
         <span class="stepn">②</span><span>받은 파일 고르기</span>
         <div class="linkrow"><button class="primary" id="origPick">폰에서 MP3 고르기</button></div>
       </div>
+      <div class="steps3">
+        <span class="stepn">또는</span><span>유튜브 영상으로 연결 <span class="badge opt">실험</span></span>
+        <div class="linkrow"><a class="linkbtn" id="ytFind" target="_blank" rel="noopener">유튜브에서 찾기</a></div>
+        <div class="linkrow"><input id="ytUrl" placeholder="유튜브 링크 붙여넣기" /><button id="ytConnect">연결</button></div>
+      </div>
+      <p class="small muted">영상은 연습 화면에 작게 보이고, 가사·화음이 영상 시간에 맞춰 움직여요. 퍼가기가 막힌 영상은 안 돼요.</p>
       <p class="small muted">곡 페이지에서 <b>MP3 다운로드(구매)</b>로 받은 파일이어야 해요. 스트리밍 이용권의 '저장' 곡은 그 앱 안에서만 재생돼서 연결할 수 없어요. 받은 파일은 보통 폰의 Music 또는 Download 폴더에 있어요.</p>
     </div>
     <div class="stage">
+      <div id="ytWrap" class="ytwrap" hidden><div id="ytBox"></div></div>
+      <div id="ytSync" class="ytsync" hidden>
+        <button id="ytTap" class="primary">첫 가사에 맞추기</button>
+        <button id="ytEarlier">가사 당기기</button><button id="ytLater">가사 늦추기</button>
+        <span id="ytOffN" class="mono"></span><button id="ytChange">영상 바꾸기</button>
+      </div>
       <div id="arrow" class="arrow"></div>
       <div id="hint" class="hint"></div>
       <canvas id="staff" class="staff" aria-label="악보"></canvas>

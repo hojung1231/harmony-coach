@@ -185,7 +185,7 @@ $('#lySave').onclick = async () => {
 
 /* ---------- 연습 ---------- */
 let actx, voice, melVoice, mic, origGain = null;
-function applyOrigVol() { if (origGain) origGain.gain.value = S.origVol; else origEl.volume = Math.min(1, S.origVol); }
+function applyOrigVol() { if (origGain) origGain.gain.value = S.origVol; else origEl.volume = Math.min(1, S.origVol); if (yt.player && yt.ready) { try { yt.player.setVolume(Math.min(100, Math.round(S.origVol * 100))); } catch {} } }
 const P = { trace: [], t: 0, playing: false, base: 0, baseT: 0, hist: [], state: 'none', pend: 'none', pendN: 0, hit: 0, tot: 0, end: 0 };
 
 function getCtx() {
@@ -207,13 +207,65 @@ function rate() { return S.speed || 1; }
 /* 타임라인: 기본 = 악보 리듬(일정 템포), 원곡 모드 = 원곡 녹음에 정렬된 시간 */
 const origEl = document.createElement('audio'); origEl.preload = 'auto'; origEl.setAttribute('playsinline', '');
 let TL = [], origUrl = null;
-const ORIG = () => S.orig && rate() === 1 && !!origUrl && !!current && !!current.orig;
+const ORIG = () => S.orig && rate() === 1 && !!origUrl && !!current && !!current.orig && !yt.use;
+/* 유튜브 영상을 원곡으로 (실험): 영상의 재생 시간을 시계로 씀. off = 영상 시간 − 곡 시간표 */
+const yt = { id: null, off: 0, use: false, player: null, ready: false, lastT: -1, lastP: 0, state: -1, dur: 0 };
+const YTM = () => S.orig && rate() === 1 && yt.use && !!yt.id && yt.ready && !!current;
+const EXT = () => ORIG() || YTM();
+function ytNow() {
+  let c = 0; try { c = yt.player.getCurrentTime() || 0; } catch {}
+  const perf = performance.now();
+  if (c !== yt.lastT) { yt.lastT = c; yt.lastP = perf; }
+  // 플레이어가 알려주는 시간은 띄엄띄엄 갱신됨 → 재생 중엔 그 사이를 이어서 계산 (최대 0.5초)
+  return yt.state === 1 ? yt.lastT + Math.min(0.5, (perf - yt.lastP) / 1000) : c;
+}
+const ytCall = (fn, ...a) => { try { yt.player && yt.player[fn] && yt.player[fn](...a); } catch {} };
+function ytId(url) {
+  const m = String(url).trim().match(/(?:youtu\.be\/|[?&]v=|\/shorts\/|\/embed\/|\/live\/)([A-Za-z0-9_-]{11})/) || String(url).trim().match(/^([A-Za-z0-9_-]{11})$/);
+  return m ? m[1] : null;
+}
+let ytApi = null;
+function loadYtApi() {
+  if (window.YT && window.YT.Player) return Promise.resolve();
+  if (!ytApi) ytApi = new Promise((res, rej) => {
+    const prev = window.onYouTubeIframeAPIReady; window.onYouTubeIframeAPIReady = () => { prev && prev(); res(); };
+    const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; s.onerror = () => { ytApi = null; rej(new Error('유튜브에 연결할 수 없어요')); }; document.head.appendChild(s);
+  });
+  return ytApi;
+}
+let ytBusy = false;
+async function ytMount() {
+  yt.ready = false; yt.state = -1; yt.lastT = -1;
+  if (yt.player) { try { yt.player.destroy(); } catch {} yt.player = null; }
+  $('#ytWrap').innerHTML = '<div id="ytBox"></div>';
+  if (!yt.id || !yt.use) return;
+  try { await loadYtApi(); } catch (e) { toast(e.message, 3500); return; }
+  yt.player = new window.YT.Player('ytBox', {
+    width: '100%', height: '100%', videoId: yt.id, playerVars: { playsinline: 1, rel: 0 },
+    events: {
+      onReady: () => { yt.ready = true; try { yt.dur = yt.player.getDuration() || 0; } catch {} applyOrigVol(); buildTL(); syncButtons(); },
+      onStateChange: (e) => {
+        yt.state = e.data;
+        if (!yt.dur) { try { yt.dur = yt.player.getDuration() || 0; buildTL(); } catch {} }
+        if (!YTM() || ytBusy) return;
+        if (e.data === 0 && P.playing) finish();
+        else if (e.data === 1 && !P.playing) togglePlay();        // 영상 안의 재생 버튼을 직접 누른 경우
+        else if (e.data === 2 && P.playing) togglePlay();
+      },
+      onError: () => toast('이 영상은 앱 안에서 재생할 수 없어요(퍼가기가 막힌 영상일 수 있어요). 다른 영상을 연결해 주세요.', 5000),
+    },
+  });
+}
+async function ytSave() { if (current) await db.put({ id: 'yt:' + current.id, videoId: yt.id, off: yt.off, use: yt.use }); }
 function buildTL() {
-  TL = ORIG() ? current.orig : current.notes.map((n) => [n[0], n[1]]);
+  const score = current.notes.map((n) => [n[0], n[1]]);
+  if (YTM()) { const base = current.orig || score; TL = base.map(([s, d]) => [s + yt.off, d]); }
+  else TL = ORIG() ? current.orig : score;
   const last = TL[TL.length - 1];
-  P.end = ORIG() ? (origEl.duration || current.origDuration || last[0] + last[1] + 1) : last[0] + last[1] + 1;
+  P.end = YTM() ? (yt.dur || last[0] + last[1] + 5) : ORIG() ? (origEl.duration || current.origDuration || last[0] + last[1] + 1) : last[0] + last[1] + 1;
 }
 function now() {
+  if (YTM()) return ytNow();
   if (ORIG()) return origEl.currentTime;
   return P.playing ? P.baseT + ((performance.now() - P.base) / 1000) * rate() : P.t;
 }
@@ -247,12 +299,15 @@ function switchMode(fn) {
   P.trace = [];
   const wasPlaying = P.playing, atStart = now() <= 0.01, pos = eighthAt(now());
   if (ORIG()) origEl.pause();
+  if (YTM()) { ytBusy = true; ytCall('pauseVideo'); }
   fn();
   buildTL();
   const t = atStart ? 0 : timeAtEighth(pos);   // 처음이면 원곡도 처음(전주)부터
   if (ORIG()) { origEl.currentTime = t; if (wasPlaying) origEl.play().catch(() => {}); }
+  else if (YTM()) { ytCall('seekTo', t, true); yt.lastT = t; yt.lastP = performance.now(); if (wasPlaying) ytCall('playVideo'); }
   else { P.t = t; P.baseT = t; P.base = performance.now(); }
   P.playing = wasPlaying;
+  setTimeout(() => { ytBusy = false; }, 600);
   syncButtons();
 }
 async function loadOrig() {
@@ -260,6 +315,9 @@ async function loadOrig() {
   const r = current && await db.get('audio:' + current.id);
   if (r && r.blob) { origUrl = URL.createObjectURL(r.blob); origEl.src = origUrl; }
   else origEl.removeAttribute('src');
+  const y = current && await db.get('yt:' + current.id);
+  yt.id = y ? y.videoId : null; yt.off = y ? y.off || 0 : 0; yt.use = !!(y && y.use);
+  await ytMount();
 }
 
 function startPlay(text) {
@@ -277,7 +335,7 @@ function startPlay(text) {
 }
 function stopPlay() {
   P.playing = false;
-  origEl.pause();
+  origEl.pause(); ytCall('pauseVideo');
   if (voice) voice.off();
   if (melVoice) melVoice.off();
 }
@@ -288,12 +346,13 @@ async function togglePlay() {
     catch (err) { mic = null; toast('마이크를 허용해 주세요. 설정 → 앱 → 화음 코치 → 권한 → 마이크 → "앱 사용 중에만 허용"', 5000); }
     try { await actx.resume(); } catch {}   // 마이크 켤 때 소리가 멈추는 기기 대비
   }
-  if (P.playing) { P.t = now(); P.playing = false; origEl.pause(); voice.off(); melVoice.off(); $('#plPlay').textContent = '▶'; }
+  if (P.playing) { P.t = now(); P.playing = false; origEl.pause(); if (YTM()) ytCall('pauseVideo'); voice.off(); melVoice.off(); $('#plPlay').textContent = '▶'; }
   else {
-    if (now() >= P.end - 0.05) { P.t = 0; P.hit = 0; P.tot = 0; if (ORIG()) origEl.currentTime = 0; }
+    if (now() >= P.end - 0.05) { P.t = 0; P.hit = 0; P.tot = 0; if (ORIG()) origEl.currentTime = 0; if (YTM()) ytCall('seekTo', 0, true); }
     P.baseT = P.t; P.base = performance.now(); P.playing = true; $('#plPlay').textContent = '⏸';
     P.calib = { t0: performance.now(), lv: [], amp: [] };
     if (ORIG()) { try { await origEl.play(); } catch (e) { toast('원곡을 재생할 수 없어요: ' + e.message); } }
+    if (YTM()) ytCall('playVideo');
   }
 }
 $('#plPlay').onclick = togglePlay;
@@ -305,7 +364,7 @@ function outLat() {
 }
 function seekTo(t) {
   t = Math.max(0, Math.min(P.end - 0.3, t));
-  if (ORIG()) origEl.currentTime = t; else { P.t = t; P.baseT = t; P.base = performance.now(); }
+  if (ORIG()) origEl.currentTime = t; else if (YTM()) { ytCall('seekTo', t, true); yt.lastT = t; yt.lastP = performance.now(); } else { P.t = t; P.baseT = t; P.base = performance.now(); }
   P.trace = []; P.hist = []; P.raw = []; P.jit = []; P.lock = null; lastLineKey = '';
 }
 let seeking = false;
@@ -344,13 +403,13 @@ const tapTone = () => { S.tone = !S.tone; save(); syncButtons(); toast(S.tone ? 
 const tapMel = () => { S.mel = !S.mel; save(); syncButtons(); toast(S.mel ? '멜로디음 켬' : '멜로디음 끔', 900); };
 document.querySelectorAll('#speedSeg button').forEach((b) => b.onclick = () => {
   const r = +b.dataset.r;
-  if (r !== 1 && ORIG()) toast('원곡은 1배에서만 나와요. 화음음·멜로디음으로 연습해요.', 2500);
+  if (r !== 1 && EXT()) toast('원곡은 1배에서만 나와요. 화음음·멜로디음으로 연습해요.', 2500);
   switchMode(() => { S.speed = r; if (r !== 1) S.orig = false; save(); });
 });
 // 원곡 버튼: 처음엔 폰의 음원 파일을 한 번 연결
 const tapOrig = () => {
-  if (!origUrl) { const l = storeLinks(current); $('#orMelon').href = l.melon; $('#orGenie').href = l.genie; $('#origPanel').hidden = false; return; }
-  const on = !ORIG();
+  if (!origUrl && !(yt.id && yt.use)) { const l = storeLinks(current); $('#ytFind').href = `https://www.youtube.com/results?search_query=${encodeURIComponent(current.title + ' ' + (current.artist || ''))}`; $('#orMelon').href = l.melon; $('#orGenie').href = l.genie; $('#origPanel').hidden = false; return; }
+  const on = !EXT();
   switchMode(() => { S.orig = on; if (on) S.speed = 1; save(); });
   toast(on ? '원곡 켬 (원곡 박자에 맞춰 진행)' : '원곡 끔 (악보 박자로 진행)', 1800);
 };
@@ -361,12 +420,28 @@ $('#origFile').addEventListener('change', async (e) => {
   if (dur == null) return toast('이 파일은 재생할 수 없어요 (보호된 파일일 수 있어요. MP3 다운로드로 받은 파일인지 확인해 주세요)', 4500);
   $('#origPanel').hidden = true;
   await db.put({ id: 'audio:' + current.id, blob: f, name: f.name, duration: dur });
+  if (yt.use) { yt.use = false; await ytSave(); }
   await loadOrig();
   const diff = current.origDuration ? Math.abs(dur - current.origDuration) : 0;
   switchMode(() => { S.orig = true; S.speed = 1; save(); });
   toast(diff > 3 ? `원곡을 연결했어요. 길이가 ${fmt(dur)}로 맞춘 음원(${fmt(current.origDuration)})과 달라 박자가 어긋날 수 있어요.` : '원곡을 연결했어요. 1배에서 원곡과 함께 연습해요.', 4000);
 });
 $('#origPick').onclick = () => $('#origFile').click();
+$('#ytConnect').onclick = async () => {
+  const id = ytId($('#ytUrl').value);
+  if (!id) return toast('유튜브 링크를 알아볼 수 없어요. 영상의 "공유 → 링크 복사"로 복사해 붙여넣어 주세요.', 4000);
+  if (P.playing) await togglePlay();
+  yt.id = id; yt.use = true; yt.off = 0; await ytSave(); await ytMount();
+  $('#origPanel').hidden = true; $('#ytUrl').value = '';
+  switchMode(() => { S.orig = true; S.speed = 1; save(); });
+  toast('유튜브 영상을 연결했어요. 재생한 뒤 "첫 가사에 맞추기"로 박자를 맞춰 주세요.', 5000);
+};
+// 박자 맞춤: 가수가 첫 가사를 부르기 시작하는 순간 누르면, 그 영상 시간을 곡의 첫 음에 맞춤
+async function ytSetOff(v) { const pos = now(); yt.off = Math.round(v * 100) / 100; await ytSave(); buildTL(); syncButtons(); P.trace = []; lastLineKey = ''; void pos; }
+$('#ytTap').onclick = () => { if (!YTM()) return; const base = (current.orig || current.notes)[0][0]; ytSetOff(ytNow() - 0.2 - base); toast('첫 가사 위치를 맞췄어요. 어긋나면 아래 버튼으로 조금씩 옮기세요.', 3000); };
+$('#ytLater').onclick = () => ytSetOff(yt.off + 0.1);
+$('#ytEarlier').onclick = () => ytSetOff(yt.off - 0.1);
+$('#ytChange').onclick = () => { yt.use = false; ytSave(); ytMount(); syncButtons(); $('#plOrig').click(); };
 $('#origClose').onclick = () => { $('#origPanel').hidden = true; };
 origEl.addEventListener('ended', () => { if (P.playing && ORIG()) finish(); });
 $('#plBack').onclick = () => show('home');
@@ -444,8 +519,9 @@ volButton('#plMel', 'melVol', 0.6, '멜로디음', tapMel);
 volButton('#plOrig', 'origVol', 2, '원곡', tapOrig);
 document.querySelectorAll('#harmSeg button').forEach((b) => b.onclick = () => { S.harm = b.dataset.h; save(); syncButtons(); });
 function syncButtons() {
-  for (const [id, on] of [['#plTone', S.tone], ['#plMel', S.mel], ['#plOrig', ORIG()]]) { $(id).classList.toggle('off', !on); $(id).setAttribute('aria-pressed', on); }
-  $('#plOrig').textContent = origUrl ? '원곡' : '원곡+';
+  for (const [id, on] of [['#plTone', S.tone], ['#plMel', S.mel], ['#plOrig', EXT()]]) { $(id).classList.toggle('off', !on); $(id).setAttribute('aria-pressed', on); }
+  $('#plOrig').textContent = origUrl || (yt.id && yt.use) ? '원곡' : '원곡+';
+  const ym = YTM(); $('#play').classList.toggle('yt-mode', ym); $('#ytWrap').hidden = !(yt.id && yt.use); $('#ytSync').hidden = !ym; $('#ytOffN').textContent = `${yt.off >= 0 ? '+' : ''}${yt.off.toFixed(1)}초`;
   document.querySelectorAll('#speedSeg button').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.r === (S.speed || 1)));
   document.querySelectorAll('#harmSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.h === S.harm));
 }
@@ -502,18 +578,18 @@ function frame() {
   const tA = now();                                  // 앱이 지금 '내보내는' 소리의 시간
   if (P.playing && tA >= P.end) { finish(); return; }
   // 귀에 '들리는' 시간: 블루투스 이어폰 등은 소리가 늦게 도착 → 화면·판정은 그만큼 늦춰서 소리와 맞춤
-  const t = tA - outLat() * (ORIG() ? 1 : rate());
+  const t = tA - outLat() * (EXT() ? 1 : rate());
   const niA = noteIndexAt(tA), ni = noteIndexAt(t);
   const harm = current.harmony[S.harm];
   const target = ni >= 0 ? harm[ni] : null;
 
   // 시작 전 카운트 (박마다 '틱')
-  if (P.playing && !ORIG() && current.eighth && tA < TL[0][0]) {
+  if (P.playing && !EXT() && current.eighth && tA < TL[0][0]) {
     const beat = Math.floor(tA / (current.eighth * 3));
     if (beat !== P.lastBeat) { P.lastBeat = beat; Voice.blip(actx, 84); }
   } else P.lastBeat = -1;
   // 화음음: 계속 들려줌. 시작 카운트 동안엔 첫 화음음을 미리 들려줘서 첫 음을 잡게 함
-  const preRoll = P.playing && !ORIG() && tA < TL[0][0];
+  const preRoll = P.playing && !EXT() && tA < TL[0][0];
   const toneMidi = !P.playing || !S.tone ? null : preRoll ? (tA > TL[0][0] - 1.0 ? harm[0] : null) : (niA >= 0 ? harm[niA] : null);
   // 음표 번호: 같은 음이 이어져도 새 음절이면 다시 침 (이음줄로 끄는 음은 그대로 이어짐)
   let nk = niA; while (nk > 0 && !current.notes[nk][3] && current.notes[nk][2] === current.notes[nk - 1][2] && TL[nk][0] - (TL[nk - 1][0] + TL[nk - 1][1]) < 0.05) nk--;
@@ -528,7 +604,7 @@ function frame() {
   let sung = mic ? mic.read() : null;
   const lvl = mic ? (mic.level || 0) : 0;
   // 지금 앱이 내는 소리 크기(스피커 누출이 이 크기에 비례한다고 봄)
-  const outAmp = (toneMidi != null ? S.vol : 0) + (melMidi != null ? S.melVol : 0) + (ORIG() && origEl && !origEl.paused ? S.origVol * 0.5 : 0);
+  const outAmp = (toneMidi != null ? S.vol : 0) + (melMidi != null ? S.melVol : 0) + ((ORIG() && !origEl.paused) || (YTM() && yt.state === 1) ? S.origVol * 0.5 : 0);
   // ① 시작 카운트 동안(사용자 조용) 마이크로 들어오는 소리 = 방 소음 + 스피커 누출
   if (mic && P.playing && P.calib && performance.now() - P.calib.t0 < 900) { P.calib.lv.push(lvl); P.calib.amp.push(outAmp); }
   else if (P.calib && P.calib.lv.length) {
@@ -588,7 +664,7 @@ function frame() {
       const outs = [];
       if (toneMidi != null) outs.push(toneMidi);
       if (melMidi != null) outs.push(melMidi);
-      if (ORIG() && ni >= 0) outs.push(current.notes[ni][2]);
+      if (EXT() && ni >= 0) outs.push(current.notes[ni][2]);
       if (!locked && outs.some((o) => near(sung, o)) && lvl < expect * 2.0) sung = null;
     }
     if (sung != null && ni >= 0) { if (!locked) P.lock = { ni, m: sung }; else P.lock.m += (sung - P.lock.m) * 0.3; }   // 인정된 음은 그 음 끝까지 잠금 (기준 음은 실제로 내는 음을 따라감)
@@ -636,7 +712,7 @@ function frame() {
   if (!P.playing) hint.textContent = P.t > 0 ? '일시정지' : '▶ 를 누르면 시작해요';
   else if (target == null) {
     const nx = TL.findIndex((n) => n[0] > t);
-    hint.textContent = nx >= 0 && TL[nx][0] - t < 2.5 ? `${Math.ceil(TL[nx][0] - t)}…` : ORIG() ? '전주·간주' : '쉬는 구간';
+    hint.textContent = nx >= 0 && TL[nx][0] - t < 2.5 ? `${Math.ceil(TL[nx][0] - t)}…` : EXT() ? '전주·간주' : '쉬는 구간';
   } else if (!mic) hint.textContent = `목표 ${noteLabel(target)} · 마이크 꺼짐`;
   else if (sung == null && performance.now() - (P.drownedAt || 0) < 1500) hint.textContent = '화음음이 커서 내 목소리가 안 들려요 · 화음음을 줄이거나 이어폰을 쓰세요';
   else if (sung == null) hint.textContent = `목표 ${noteLabel(target)} · ${mic.level > 0.004 && rawSung == null ? '소리가 작거나 음이 흐려요' : '불러보세요'}`;
@@ -817,7 +893,7 @@ $('#soundTest').onclick = () => {
   toast('라·도#·미 소리가 들리면 정상이에요. 안 들리면 미디어 볼륨과 무음 모드를 확인하세요.', 3500);
 };
 $('#origClear').onclick = async () => {
-  for (const s of await db.getAll()) if (String(s.id).startsWith('audio:')) await db.del(s.id);
+  for (const s of await db.getAll()) if (String(s.id).startsWith('audio:') || String(s.id).startsWith('yt:')) await db.del(s.id);
   S.orig = false; save(); toast('연결한 원곡 파일을 지웠어요');
 };
 
