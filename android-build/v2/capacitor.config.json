@@ -1,0 +1,12 @@
+{
+  "appId": "com.hojung1231.harmonycoach2",
+  "appName": "화음 코치 2",
+  "webDir": "www",
+  "server": {
+    "url": "https://hojung1231.github.io/harmony-coach/v2/",
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#F6F6F8"
+  }
+}
