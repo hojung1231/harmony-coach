@@ -50,7 +50,7 @@
         <div class="num">3</div>
         <div class="body">
           <div class="head"><b>원곡 음원</b><span class="badge opt">선택</span></div>
-          <p class="small muted">원곡을 들으며 연습하려면 폰에 있는 mp3 파일이 필요해요. 연습 화면의 <b>원곡+</b> 버튼으로 연결해요. 없어도 화음음·멜로디음으로 연습할 수 있어요.</p>
+          <p class="small muted">원곡을 들으며 연습하려면 폰에 있는 mp3 파일이 필요해요. 연습 화면의 <b>원곡+</b> 버튼을 누르면 멜론·지니에서 받는 길과 파일 고르기가 나와요. 없어도 화음음·멜로디음으로 연습할 수 있어요.</p>
         </div>
       </div>
     </div>
@@ -61,7 +61,13 @@
     <header><button class="icon" data-go="home" aria-label="뒤로">←</button><h2 id="lyTitle">가사</h2></header>
     <div class="content">
       <p class="muted">가사는 저작권 때문에 앱에 들어 있지 않아요. 한 번만 붙여넣으면 이 폰에만 저장돼요.</p>
-      <textarea id="lyText" placeholder="가사를 붙여넣으세요 (멜론·지니 가사 그대로)"></textarea>
+      <div class="steps3">
+        <span class="stepn">①</span><span>가사 찾아서 전체 복사</span>
+        <div class="linkrow"><a class="linkbtn" id="lyMelon" target="_blank" rel="noopener">멜론에서 찾기</a><a class="linkbtn" id="lyGenie" target="_blank" rel="noopener">지니에서 찾기</a></div>
+        <span class="stepn">②</span><span>돌아와서 붙여넣기</span>
+        <div class="linkrow"><button id="lyPaste">📋 복사한 가사 붙여넣기</button></div>
+      </div>
+      <textarea id="lyText" placeholder="여기에 가사가 들어가요 (직접 길게 눌러 붙여넣어도 돼요)"></textarea>
       <p id="lyCheck" class="small muted"></p>
       <button class="primary big" id="lySave">저장하고 시작</button>
     </div>
@@ -76,6 +82,16 @@
       <p class="small muted">재생 중에 눌러서 원곡·내 목소리 사이에서 어떤 소리가 잘 들리는지 바로 비교해 보세요.</p>
       <div id="patchList" class="patches"></div>
       <label class="chk"><input type="checkbox" id="toneOct" />한 옥타브 위로 (목소리와 겹치면 켜 보세요)</label>
+    </div>
+    <div id="origPanel" class="sheet" hidden>
+      <div class="sheethead"><b>원곡 음원 연결</b><button class="icon" id="origClose" aria-label="닫기">✕</button></div>
+      <div class="steps3">
+        <span class="stepn">①</span><span>MP3 파일 구하기 <span class="muted small">(이미 있으면 건너뛰기)</span></span>
+        <div class="linkrow"><a class="linkbtn" id="orMelon" target="_blank" rel="noopener">멜론에서 MP3 받기</a><a class="linkbtn" id="orGenie" target="_blank" rel="noopener">지니에서 MP3 받기</a></div>
+        <span class="stepn">②</span><span>받은 파일 고르기</span>
+        <div class="linkrow"><button class="primary" id="origPick">폰에서 MP3 고르기</button></div>
+      </div>
+      <p class="small muted">곡 페이지에서 <b>MP3 다운로드(구매)</b>로 받은 파일이어야 해요. 스트리밍 이용권의 '저장' 곡은 그 앱 안에서만 재생돼서 연결할 수 없어요. 받은 파일은 보통 폰의 Music 또는 Download 폴더에 있어요.</p>
     </div>
     <div class="stage">
       <div id="arrow" class="arrow"></div>

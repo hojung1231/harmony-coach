@@ -111,3 +111,8 @@ button.icon.sm { padding: 4px 6px; }
 .timeRow .mono { font-size: 12px; }
 button.icon.sm { white-space: nowrap; font-size: 13px; }
 header.clear h2 { min-width: 0; }
+.steps3 { display: grid; grid-template-columns: 22px 1fr; gap: 6px 6px; align-items: center; font-size: 15px; }
+.steps3 .stepn { color: var(--accent); font-weight: 800; }
+.steps3 .linkrow { grid-column: 2; display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.linkbtn { flex: 1; text-align: center; text-decoration: none; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 14px; white-space: nowrap; }
+.steps3 .linkrow button { flex: 1; }

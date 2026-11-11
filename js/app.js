@@ -144,8 +144,14 @@ async function lyricsOf(song) {
   const r = await db.get('lyrics:' + song.id);
   return r ? r.text : null;
 }
+// 멜론·지니 검색 링크 (공식 사이트의 검색 결과를 여는 것 — 구매·복사는 사용자가 직접)
+function storeLinks(song) {
+  const q = encodeURIComponent(`${song.title} ${song.artist || ''}`.trim());
+  return { melon: `https://www.melon.com/search/total/index.htm?q=${q}`, genie: `https://www.genie.co.kr/search/searchMain?query=${q}` };
+}
+function setLyricLinks() { const l = storeLinks(current); $('#lyMelon').href = l.melon; $('#lyGenie').href = l.genie; }
 async function openSong(song) {
-  current = song;
+  current = song; setLyricLinks();
   const text = await lyricsOf(song);
   if (!text) {
     $('#lyTitle').textContent = `${song.title} 가사`;
@@ -162,6 +168,13 @@ function checkLyrics() {
   $('#lyCheck').textContent = !got ? `악보 음절 ${need}개` : got === need ? `✓ 음절 ${got}개 — 악보와 딱 맞아요` : `음절 ${got}개 / 악보 ${need}개 — 조금 다르지만 그대로 쓸 수 있어요`;
 }
 $('#lyText').addEventListener('input', checkLyrics);
+$('#lyPaste').onclick = async () => {
+  try {
+    const t = await navigator.clipboard.readText();
+    if (!t || !t.trim()) return toast('복사된 내용이 없어요. 가사를 먼저 복사해 주세요.', 2500);
+    $('#lyText').value = t; checkLyrics(); toast('붙여넣었어요. 아래 내용을 확인하고 저장하세요.', 2200);
+  } catch { toast('자동 붙여넣기가 막혀 있어요. 아래 칸을 길게 눌러 붙여넣어 주세요.', 3500); $('#lyText').focus(); }
+};
 $('#lySave').onclick = async () => {
   const text = cleanLyrics($('#lyText').value, current);
   if (!text) return toast('가사를 붙여넣어 주세요');
@@ -336,7 +349,7 @@ document.querySelectorAll('#speedSeg button').forEach((b) => b.onclick = () => {
 });
 // 원곡 버튼: 처음엔 폰의 음원 파일을 한 번 연결
 const tapOrig = () => {
-  if (!origUrl) { $('#origFile').click(); return; }
+  if (!origUrl) { const l = storeLinks(current); $('#orMelon').href = l.melon; $('#orGenie').href = l.genie; $('#origPanel').hidden = false; return; }
   const on = !ORIG();
   switchMode(() => { S.orig = on; if (on) S.speed = 1; save(); });
   toast(on ? '원곡 켬 (원곡 박자에 맞춰 진행)' : '원곡 끔 (악보 박자로 진행)', 1800);
@@ -345,13 +358,16 @@ $('#origFile').addEventListener('change', async (e) => {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
   const dur = await new Promise((res) => { const a = new Audio(); a.preload = 'metadata'; a.onloadedmetadata = () => res(a.duration); a.onerror = () => res(null); a.src = URL.createObjectURL(f); });
-  if (dur == null) return toast('이 파일은 재생할 수 없어요');
+  if (dur == null) return toast('이 파일은 재생할 수 없어요 (보호된 파일일 수 있어요. MP3 다운로드로 받은 파일인지 확인해 주세요)', 4500);
+  $('#origPanel').hidden = true;
   await db.put({ id: 'audio:' + current.id, blob: f, name: f.name, duration: dur });
   await loadOrig();
   const diff = current.origDuration ? Math.abs(dur - current.origDuration) : 0;
   switchMode(() => { S.orig = true; S.speed = 1; save(); });
   toast(diff > 3 ? `원곡을 연결했어요. 길이가 ${fmt(dur)}로 맞춘 음원(${fmt(current.origDuration)})과 달라 박자가 어긋날 수 있어요.` : '원곡을 연결했어요. 1배에서 원곡과 함께 연습해요.', 4000);
 });
+$('#origPick').onclick = () => $('#origFile').click();
+$('#origClose').onclick = () => { $('#origPanel').hidden = true; };
 origEl.addEventListener('ended', () => { if (P.playing && ORIG()) finish(); });
 $('#plBack').onclick = () => show('home');
 /* ---------- 화음 가이드음 음색 고르기 ---------- */
@@ -384,6 +400,7 @@ function applyView() {
 }
 $('#plView').onclick = () => { S.view = S.view === 'graph' ? 'arrow' : 'graph'; save(); applyView(); toast(S.view === 'graph' ? '그래프 모드' : '화살표 모드', 900); };
 $('#plLyrics').onclick = async () => {
+  setLyricLinks();
   $('#lyTitle').textContent = `${current.title} 가사`;
   $('#lyText').value = (await lyricsOf(current)) || '';
   checkLyrics(); show('lyrics');
