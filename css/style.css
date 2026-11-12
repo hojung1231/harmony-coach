@@ -130,3 +130,18 @@ header.clear h2 { min-width: 0; }
 .mp3card { display: flex; flex-direction: column; gap: 8px; }
 .mp3card b { font-size: 16px; }
 .center { text-align: center; }
+/* 새 곡 추가 (MP3 + 악보) */
+.need.done .num { background: #1aa060; }
+.need.done .num::after { content: ''; }
+.filebtn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+#add input:not([type=file]), #setKey { font: inherit; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); width: 100%; box-sizing: border-box; }
+#addOct { flex-wrap: wrap; }
+#addOct button { font-size: 13px; padding: 8px 10px; }
+#addProg .track { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: 8px; }
+#addProg .track div { height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+#add .card { display: flex; flex-direction: column; gap: 10px; }
+#addMake:disabled { opacity: .45; }
+details.adv { margin-top: 18px; }
+details.adv summary { cursor: pointer; padding: 6px 0; }
+details.adv .filebtn { margin-top: 8px; background: transparent; color: var(--accent); border: 1px solid var(--line); }
+.song .chips .del { margin-left: auto; font-size: 12px; padding: 3px 10px; border-radius: 10px; background: transparent; color: var(--muted); border: 1px solid var(--line); }

@@ -30,29 +30,40 @@
   <section class="screen" id="add">
     <header><button class="icon" data-go="home" aria-label="뒤로">←</button><h2>새 곡 추가</h2></header>
     <div class="content">
-      <p class="muted">곡 하나에 필요한 건 아래 3가지예요.</p>
-      <div class="need">
+      <p class="muted">원곡 MP3와 악보만 올리면 앱이 알아서 곡을 만들어요.</p>
+      <div class="need" id="addMp3Box">
         <div class="num">1</div>
         <div class="body">
-          <div class="head"><b>곡 파일</b><span class="badge must">필수</span></div>
-          <p class="small muted">악보의 멜로디·박자·화음이 담긴 <b>.json</b> 파일이에요. 앱이 악보를 직접 읽지는 못해서, 악보(PDF나 사진)를 Claude에게 보내 이 파일로 만들어 받아야 해요.</p>
-          <label class="primary filebtn">곡 파일 고르기<input type="file" id="songFile" accept=".json,application/json" hidden /></label>
+          <div class="head"><b>원곡 MP3</b><span class="badge must">필수</span></div>
+          <p class="small muted" id="addMp3Info">멜론·지니에서 받은 MP3면 제목·가수·가사가 자동으로 들어와요.</p>
+          <label class="primary filebtn" id="addMp3Btn">MP3 고르기<input type="file" id="addMp3" accept="audio/mpeg,audio/*,.mp3" hidden /></label>
         </div>
       </div>
-      <div class="need">
+      <div class="need" id="addSheetBox">
         <div class="num">2</div>
         <div class="body">
-          <div class="head"><b>가사</b><span class="badge must">필수</span></div>
-          <p class="small muted">곡 파일을 고르면 다음 화면에서 <b>원곡 MP3를 고르면 가사가 자동으로</b> 채워져요. MP3에 가사가 없으면 멜론·지니에서 복사해 붙여넣어요.</p>
+          <div class="head"><b>악보</b><span class="badge must">필수</span></div>
+          <p class="small muted" id="addSheetInfo">PDF 파일 또는 악보 사진(여러 장 가능, 순서대로).</p>
+          <label class="primary filebtn" id="addSheetBtn">악보 고르기<input type="file" id="addSheet" accept="application/pdf,.pdf,image/*" multiple hidden /></label>
         </div>
       </div>
-      <div class="need">
-        <div class="num">3</div>
-        <div class="body">
-          <div class="head"><b>원곡 음원</b><span class="badge opt">선택</span></div>
-          <p class="small muted">원곡을 들으며 연습하려면 폰에 있는 mp3 파일이 필요해요. 연습 화면의 <b>원곡+</b> 버튼을 누르면 멜론·지니에서 받는 길과 파일 고르기가 나와요. 없어도 화음음·멜로디음으로 연습할 수 있어요.</p>
+      <div class="card" id="addMeta" hidden>
+        <label class="field">제목<input id="addTitle" /></label>
+        <label class="field">가수<input id="addArtist" /></label>
+        <div class="field">부르는 음높이
+          <div class="seg" id="addOct"><button data-o="1">남자 (악보보다 한 옥타브 아래)</button><button data-o="0">여자 (악보 그대로)</button></div>
         </div>
       </div>
+      <div class="card" id="addKeyBox" hidden>
+        <b>Claude API 키 (처음 한 번)</b>
+        <p class="small muted">악보를 음표로 읽는 일은 Claude(AI)가 해요. <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>에서 만든 키(sk-ant-…)를 넣어 주세요. 키는 이 폰에만 저장되고 Claude 서버에만 보내요. 곡 하나 만들 때 보통 수백 원 정도 들어요.</p>
+        <input id="addKey" type="password" placeholder="sk-ant-..." autocomplete="off" />
+      </div>
+      <button class="primary big" id="addMake" disabled>🎵 곡 만들기</button>
+      <div class="card" id="addProg" hidden><b id="addProgT">악보 읽는 중…</b><p class="small muted" id="addProgS"></p><div class="track"><div id="addProgBar"></div></div></div>
+      <details class="small muted adv"><summary>곡 파일(.json)이 이미 있다면</summary>
+        <label class="filebtn">곡 파일 가져오기<input type="file" id="songFile" accept=".json,application/json" hidden /></label>
+      </details>
     </div>
   </section>
 
@@ -179,6 +190,8 @@
       <p class="small muted">느리게 연습해도 화음음·멜로디음은 앱이 직접 만드는 소리라 음정이 그대로예요. 박자만 느려져요.</p>
       <button id="origClear">연결한 원곡 파일 지우기</button>
       <p class="small muted">원곡은 연습 화면의 '원곡+' 버튼으로 폰에 있는 음원 파일을 한 번 연결하면 1배속에서 함께 나와요. 파일은 이 폰에만 저장돼요.</p>
+      <label class="field">Claude API 키 (악보 읽기용)<input id="setKey" type="password" placeholder="sk-ant-..." autocomplete="off" /></label>
+      <p class="small muted">새 곡 추가에서 악보를 음표로 바꿀 때만 써요. 이 폰에만 저장돼요.</p>
       <hr />
       <div class="row"><span class="muted">버전 <b id="appVer"></b></span><span class="spacer"></span><button id="updateCheck">업데이트 확인</button></div>
       <p class="small muted">🎧 이어폰을 끼면 가장 정확해요.</p>

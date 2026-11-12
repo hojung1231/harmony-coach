@@ -2,6 +2,7 @@
 import * as db from './db.js';
 import { MicPitch, Voice, PATCHES } from './pitch.js';
 import { readTags } from './id3.js';
+import { readSheet, buildSong, alignToAudio, lyricsFromSheet } from './autosong.js';
 import { APP_VERSION, checkUpdate, applyUpdate } from './update.js';
 
 const $ = (s) => document.querySelector(s);
@@ -32,6 +33,7 @@ function show(id, fromPop) {
   if (id !== 'play') stopPlay();
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
   if (id === 'home') renderHome();
+  if (id === 'add') addRefresh();
   if (id === 'settings') renderSettings();
   // 폰의 '뒤로' 버튼: 안쪽 화면에서는 앱이 꺼지지 않고 곡 목록(홈)으로
   if (!fromPop) {
@@ -128,6 +130,17 @@ async function renderHome() {
     const hasLy = !!(await lyricsOf(s)), hasAu = !!(await db.get('audio:' + s.id));
     el.querySelector('.chips').innerHTML = `<span class="chip ${hasLy ? 'ok' : 'no'}">${hasLy ? '가사 ✓' : '가사 필요'}</span><span class="chip ${hasAu ? 'ok' : ''}">${hasAu ? '원곡 ✓' : '원곡 없음(선택)'}</span>`;
     el.onclick = () => openSong(s);
+    if (!s.builtin) {
+      const del = document.createElement('button');
+      del.className = 'del'; del.textContent = '삭제'; del.setAttribute('aria-label', '곡 삭제');
+      del.onclick = async (ev) => {
+        ev.stopPropagation();
+        if (!confirm(`'${s.title}' 곡을 지울까요? (이 폰에 저장된 원곡·가사도 함께 지워져요)`)) return;
+        for (const k of [s.id, 'audio:' + s.id, 'lyrics:' + s.id, 'yt:' + s.id]) await db.del(k);
+        renderHome();
+      };
+      el.querySelector('.chips').appendChild(del);
+    }
     box.appendChild(el);
   }
 }
@@ -144,6 +157,103 @@ $('#songFile').addEventListener('change', async (e) => {
     openSong(s);   // 바로 2단계(가사)로
   } catch (err) { toast('추가 실패: ' + err.message, 3500); }
 });
+
+/* ---------- 새 곡 추가: 원곡 MP3 + 악보 → 자동으로 곡 만들기 ---------- */
+const ADD = { mp3: null, tags: null, dur: 0, sheets: [], oct: 1, busy: false };
+const getKey = () => { try { return localStorage.getItem('hc-claude-key') || ''; } catch { return ''; } };
+const setKey = (k) => { try { localStorage.setItem('hc-claude-key', (k || '').trim()); } catch {} };
+function addReset() {
+  Object.assign(ADD, { mp3: null, tags: null, dur: 0, sheets: [], oct: 1, busy: false });
+  $('#addTitle').value = ''; $('#addArtist').value = ''; $('#addKey').value = '';
+  $('#addProg').hidden = true; addRefresh();
+}
+function addRefresh() {
+  const t = ADD.tags || {};
+  $('#addMp3Box').classList.toggle('done', !!ADD.mp3);
+  $('#addMp3Info').innerHTML = ADD.mp3
+    ? `✓ <b></b> (${fmt(ADD.dur)})<br>${t.lyrics ? '가사도 들어 있어요 ✓' : '가사가 없는 파일이에요 — 악보의 가사를 쓸게요'}`
+    : '멜론·지니에서 받은 MP3면 제목·가수·가사가 자동으로 들어와요.';
+  if (ADD.mp3) $('#addMp3Info b').textContent = ADD.mp3.name;
+  $('#addMp3Btn').classList.toggle('ghost', !!ADD.mp3); $('#addMp3Btn').firstChild.textContent = ADD.mp3 ? '다른 MP3 고르기' : 'MP3 고르기';
+  $('#addSheetBox').classList.toggle('done', ADD.sheets.length > 0);
+  $('#addSheetInfo').textContent = ADD.sheets.length ? '✓ ' + ADD.sheets.map((f) => f.name).join(', ') : 'PDF 파일 또는 악보 사진(여러 장 가능, 순서대로).';
+  $('#addSheetBtn').classList.toggle('ghost', ADD.sheets.length > 0); $('#addSheetBtn').firstChild.textContent = ADD.sheets.length ? '다시 고르기' : '악보 고르기';
+  $('#addMeta').hidden = !ADD.mp3 && !ADD.sheets.length;
+  $('#addKeyBox').hidden = !!getKey();
+  document.querySelectorAll('#addOct button').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.o === ADD.oct)));
+  $('#addMake').disabled = ADD.busy || !ADD.mp3 || !ADD.sheets.length;
+  $('#addMake').textContent = ADD.busy ? '만드는 중…' : '🎵 곡 만들기';
+}
+document.querySelectorAll('#addOct button').forEach((b) => b.onclick = () => { ADD.oct = +b.dataset.o; addRefresh(); });
+$('#addMp3').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  const dur = await new Promise((res) => { const a = new Audio(); a.preload = 'metadata'; a.onloadedmetadata = () => res(a.duration); a.onerror = () => res(null); a.src = URL.createObjectURL(f); });
+  if (dur == null) return toast('재생할 수 없는 파일이에요. MP3 파일을 골라 주세요.', 3000);
+  ADD.mp3 = f; ADD.dur = dur; ADD.tags = await readTags(f).catch(() => ({}));
+  const base = f.name.replace(/\.[^.]+$/, '');
+  const dash = base.indexOf('-');
+  $('#addTitle').value = ADD.tags.title || (dash > 0 ? base.slice(dash + 1).trim() : base);
+  $('#addArtist').value = ADD.tags.artist || (dash > 0 ? base.slice(0, dash).trim() : '');
+  addRefresh();
+});
+$('#addSheet').addEventListener('change', (e) => {
+  const fs = [...e.target.files]; e.target.value = '';
+  if (!fs.length) return;
+  ADD.sheets = fs.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  addRefresh();
+});
+function addProg(title, sub, pct) {
+  $('#addProg').hidden = false; $('#addProgT').textContent = title; $('#addProgS').textContent = sub || '';
+  if (pct != null) $('#addProgBar').style.width = Math.round(pct) + '%';
+}
+$('#addMake').onclick = async () => {
+  if (ADD.busy) return;
+  const typed = $('#addKey').value.trim();
+  if (typed) setKey(typed);
+  const apiKey = getKey();
+  if (!apiKey) { $('#addKeyBox').hidden = false; $('#addKey').focus(); return toast('Claude API 키를 먼저 넣어 주세요', 2500); }
+  ADD.busy = true; addRefresh();
+  let wake = null; try { wake = await navigator.wakeLock.request('screen'); } catch {}
+  const title = $('#addTitle').value.trim(), artist = $('#addArtist').value.trim();
+  const t0 = Date.now();
+  let sub = '보통 1~3분 걸려요. 화면을 켜 둔 채 기다려 주세요.', pct = 5;
+  const tick = setInterval(() => { if (pct < 70) addProg('① Claude가 악보를 읽는 중…', `${sub} (${Math.round((Date.now() - t0) / 1000)}초)`, pct); }, 1000);
+  try {
+    addProg('① Claude가 악보를 읽는 중…', sub, pct);
+    const sheet = await readSheet({
+      apiKey, files: ADD.sheets, title, artist,
+      onProgress: (c) => { sub = `음표 받는 중… ${Math.round(c / 100) / 10}k 글자`; pct = Math.min(69, 10 + c / 600); },
+    });
+    pct = 100; clearInterval(tick);
+    const song = buildSong(sheet, { octave: ADD.oct, title, artist });
+    const info = `음표 ${song.notes.length}개 · ${song.key} · ${song.time}`;
+    addProg('② 원곡에 박자 맞추는 중…', info, 75);
+    try {
+      const al = await alignToAudio(song, ADD.mp3, (st) => addProg('② 원곡에 박자 맞추는 중…', `${info} · ${st === 'feat' ? '원곡 음 흐름 분석' : '악보와 원곡 맞추기'}`, st === 'feat' ? 82 : 92));
+      song.orig = al.orig; song.origDuration = +al.duration.toFixed(2);
+      song.auto.align = { ratio: +al.ratio.toFixed(4), offset: +al.offset.toFixed(2), score: +al.score.toFixed(3) };
+    } catch (err) { console.warn('align', err); }
+    addProg('③ 저장하는 중…', info, 97);
+    await db.put(song);
+    await db.put({ id: 'audio:' + song.id, blob: ADD.mp3, name: ADD.mp3.name, duration: ADD.dur });
+    const ly = ADD.tags && ADD.tags.lyrics ? cleanLyrics(ADD.tags.lyrics, song) : lyricsFromSheet(song);
+    if (ly) await db.put({ id: 'lyrics:' + song.id, text: ly });
+    addProg('완성!', info, 100);
+    S.orig = !!song.orig; S.speed = 1; save();
+    const okAlign = song.orig && song.auto.align.score > 0.4;
+    toast(`'${song.title}' 완성! ${okAlign ? '원곡과 박자를 맞췄어요.' : '원곡 박자가 어긋나면 원곡을 끄고 연습해 보세요.'}`, 4500);
+    ADD.busy = false; addReset();
+    openSong(song);
+  } catch (err) {
+    console.error(err);
+    clearInterval(tick);
+    ADD.busy = false;
+    if (err && err.name === 'SheetError' && /API 키/.test(err.message)) setKey('');
+    addRefresh();
+    addProg('만들지 못했어요', (err && err.message) || String(err), 0);
+  } finally { clearInterval(tick); try { wake && wake.release(); } catch {} }
+};
 
 /* ---------- 가사 넣기 ---------- */
 let current = null, lyr = null;
@@ -755,13 +865,21 @@ function frame() {
   raf = requestAnimationFrame(frame);
 }
 
-/* ---------- 악보 그리기 (오선, D장조 조표, 멜로디=회색, 화음=파랑) ---------- */
-const SPELL = { 0: [0, '♮'], 1: [0, ''], 2: [1, ''], 3: [1, '♯'], 4: [2, ''], 5: [3, '♮'], 6: [3, ''], 7: [4, ''], 8: [4, '♯'], 9: [5, ''], 10: [6, '♭'], 11: [6, ''] };
-// D장조 기준 표기: C#·F# 는 조표에 있어 임시표 없음
+/* ---------- 악보 그리기 (오선, 조표, 멜로디=회색, 화음=파랑) ---------- */
+// 조표에 맞춘 표기: 조표에 있는 음은 임시표 없이, 벗어난 음만 ♯·♭·♮
+const NAT = [0, 2, 4, 5, 7, 9, 11];            // C D E F G A B
+const SH_ORDER = [3, 0, 4, 1, 5, 2, 6], FL_ORDER = [6, 2, 5, 1, 4, 0, 3];   // F C G D A E B / B E A D G C F
+const keyAccOf = (ks) => { const a = [0, 0, 0, 0, 0, 0, 0]; for (let i = 0; i < Math.abs(ks); i++) a[(ks > 0 ? SH_ORDER : FL_ORDER)[i]] = ks > 0 ? 1 : -1; return a; };
 function staffPos(midi) {           // 아래 첫 줄(E4)=0, 한 칸=1/2줄
-  const pc = ((midi % 12) + 12) % 12, oct = Math.floor(midi / 12) - 1;
-  const [letter, acc] = SPELL[pc];
-  return { step: oct * 7 + letter - (4 * 7 + 2), acc };
+  const ks = current && current.keySig != null ? current.keySig : 2, ka = keyAccOf(ks);
+  const pc = ((midi % 12) + 12) % 12;
+  const cands = [];
+  for (let l = 0; l < 7; l++) for (const acc of [0, 1, -1]) if ((NAT[l] + acc + 12) % 12 === pc) cands.push({ l, acc });
+  const pick = cands.find((c) => c.acc === ka[c.l]) || cands.find((c) => c.acc === 0)
+    || cands.find((c) => c.acc === (ks < 0 || pc === 10 ? -1 : 1)) || cands[0];
+  const oct = Math.floor((midi - pick.acc) / 12) - 1;
+  const acc = pick.acc === ka[pick.l] ? '' : pick.acc === 1 ? '♯' : pick.acc === -1 ? '♭' : '♮';
+  return { step: oct * 7 + pick.l - (4 * 7 + 2), acc };
 }
 let noteSyl = [];
 function buildNoteSyl() {
@@ -776,7 +894,7 @@ function drawStaff(t, ni) {
   if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, w, h);
-  const gap = 12, bottom = h - 54, LX = 44, playX = Math.max(90, w * 0.3), px = 30;   // 8분음표 하나 = 30px
+  const ksN = Math.abs(current.keySig != null ? current.keySig : 2), tsX = 22 + ksN * 10, LX = Math.max(44, tsX - 14), gap = 12, bottom = h - 54, playX = Math.max(90, w * 0.3), px = 30;   // 8분음표 하나 = 30px
   const curE = eighthAt(t);
   const X = (e) => playX + (e - curE) * px;
   const Y = (step) => bottom - step * (gap / 2);
@@ -824,8 +942,9 @@ function drawStaff(t, ni) {
   g.strokeStyle = ink; g.lineWidth = 1;
   for (let i = 0; i < 5; i++) { const y = Y(i * 2); g.beginPath(); g.moveTo(8, y); g.lineTo(LX + 30, y); g.stroke(); }
   g.fillStyle = ink; g.font = '22px serif'; g.textBaseline = 'middle';
-  g.fillText('♯', 14, Y(8)); g.fillText('♯', 28, Y(5));
-  if (current.time) { const [a, b] = current.time.split('/'); g.font = 'bold 15px serif'; g.fillStyle = ink; g.textAlign = 'center'; g.fillText(a, 58, Y(6)); g.fillText(b, 58, Y(2)); g.textAlign = 'left'; }
+  { const ks = current.keySig != null ? current.keySig : 2, SH = [8, 5, 9, 6, 3, 7, 4], FL = [4, 7, 3, 6, 2, 5, 1];
+    for (let i = 0; i < Math.abs(ks); i++) g.fillText(ks > 0 ? '♯' : '♭', 12 + i * 10, Y((ks > 0 ? SH : FL)[i])); }
+  if (current.time) { const [a, b] = current.time.split('/'); g.font = 'bold 15px serif'; g.fillStyle = ink; g.textAlign = 'center'; g.fillText(a, tsX, Y(6)); g.fillText(b, tsX, Y(2)); g.textAlign = 'left'; }
   // 지금 위치
   g.strokeStyle = hot; g.lineWidth = 2; g.beginPath(); g.moveTo(playX, 8); g.lineTo(playX, h - 8); g.stroke();
 }
@@ -905,6 +1024,7 @@ function renderSettings() {
   $('#setAec').checked = S.filter; $('#setPhoneMic').checked = S.phoneMic !== false; $('#setOct').checked = S.octaveFree;
   $('#appVer').textContent = APP_VERSION;
   $('#setSync').value = S.sync || 0; syncLabel();
+  $('#setKey').value = getKey();
 }
 document.querySelectorAll('#tolSeg button').forEach((b) => b.onclick = () => { S.tol = +b.dataset.t; save(); renderSettings(); });
 function syncLabel() {
@@ -912,6 +1032,7 @@ function syncLabel() {
   $('#syncN').textContent = `${v > 0 ? '+' : ''}${v}ms` + (auto != null ? ` (자동 감지한 소리 지연 ${auto}ms에 더함)` : '');
 }
 $('#setSync').oninput = (e) => { S.sync = +e.target.value; save(); syncLabel(); };
+$('#setKey').onchange = (e) => { setKey(e.target.value); toast(e.target.value.trim() ? 'API 키를 저장했어요' : 'API 키를 지웠어요'); };
 $('#setOct').onchange = (e) => { S.octaveFree = e.target.checked; save(); };
 $('#setPhoneMic').onchange = (e) => { S.phoneMic = e.target.checked; save(); if (mic) { mic.stop(); mic = null; } toast('다음 재생부터 적용돼요'); };
 $('#setAec').onchange = (e) => { S.filter = e.target.checked; save(); if (mic) { mic.stop(); mic = null; } };
