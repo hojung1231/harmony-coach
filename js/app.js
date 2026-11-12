@@ -43,6 +43,16 @@ function show(id, fromPop) {
 }
 window.addEventListener('popstate', () => { if (skipPop) { skipPop = false; return; } show('home', true); });
 if (history.state && history.state.hc) history.replaceState(null, '');   // 새로고침 뒤 남은 기록 정리
+// 설치형 안드로이드 앱의 뒤로 버튼: 열린 창 닫기 → 홈으로 → (홈이면) 앱 닫기
+function onBack() {
+  for (const id of ['#patchPanel', '#origPanel', '#volPop']) { const el = document.querySelector(id); if (el && !el.hidden) { el.hidden = true; return true; } }
+  const cur = document.querySelector('.screen.active');
+  if (cur && cur.id !== 'home') { show('home'); return true; }
+  return false;
+}
+const CapApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+if (CapApp && CapApp.addListener) CapApp.addListener('backButton', () => { if (!onBack()) CapApp.exitApp(); });
+window.__back = onBack;
 document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => show(b.dataset.go)));
 
 /* ---------- 가사 → 음절 ---------- */

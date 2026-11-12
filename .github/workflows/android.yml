@@ -28,7 +28,7 @@ jobs:
           cp android-build/capacitor.config.json app/
           cd app
           npm init -y >/dev/null
-          npm install @capacitor/core@6.2.0 @capacitor/cli@6.2.0 @capacitor/android@6.2.0
+          npm install @capacitor/core@6.2.0 @capacitor/cli@6.2.0 @capacitor/android@6.2.0 @capacitor/app@6.0.2
           npx cap add android
           npx cap sync android
       - name: Microphone permission and icon
