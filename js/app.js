@@ -1,6 +1,7 @@
 // 화음 코치 2.0 — 악보 기반 화음 연습 (원곡 없이 화음음 + 가사)
 import * as db from './db.js';
 import { MicPitch, Voice, PATCHES } from './pitch.js';
+import { readTags } from './id3.js';
 import { APP_VERSION, checkUpdate, applyUpdate } from './update.js';
 
 const $ = (s) => document.querySelector(s);
@@ -152,7 +153,13 @@ function storeLinks(song) {
 function setLyricLinks() { const l = storeLinks(current); $('#lyMelon').href = l.melon; $('#lyGenie').href = l.genie; }
 async function openSong(song) {
   current = song; setLyricLinks();
-  const text = await lyricsOf(song);
+  let text = await lyricsOf(song);
+  if (!text) {
+    // 연결된 원곡 MP3 안에 가사가 있으면 그걸 씀
+    const au = await db.get('audio:' + song.id);
+    const ly = au && au.blob ? (await readTags(au.blob).catch(() => ({}))).lyrics : null;
+    if (ly) { text = cleanLyrics(ly, song); await db.put({ id: 'lyrics:' + song.id, text }); toast('원곡 MP3 파일에서 가사를 가져왔어요', 2500); }
+  }
   if (!text) {
     $('#lyTitle').textContent = `${song.title} 가사`;
     $('#lyText').value = '';
@@ -168,6 +175,19 @@ function checkLyrics() {
   $('#lyCheck').textContent = !got ? `악보 음절 ${need}개` : got === need ? `✓ 음절 ${got}개 — 악보와 딱 맞아요` : `음절 ${got}개 / 악보 ${need}개 — 조금 다르지만 그대로 쓸 수 있어요`;
 }
 $('#lyText').addEventListener('input', checkLyrics);
+$('#lyMp3').onclick = () => $('#lyMp3File').click();
+$('#lyMp3File').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  const tags = await readTags(f).catch(() => ({}));
+  // 원곡으로도 연결 (재생할 수 있는 파일일 때)
+  const dur = await new Promise((res) => { const a = new Audio(); a.preload = 'metadata'; a.onloadedmetadata = () => res(a.duration); a.onerror = () => res(null); a.src = URL.createObjectURL(f); });
+  if (dur != null) await db.put({ id: 'audio:' + current.id, blob: f, name: f.name, duration: dur });
+  if (tags.lyrics) {
+    $('#lyText').value = cleanLyrics(tags.lyrics, current); checkLyrics();
+    toast(dur != null ? 'MP3에서 가사를 가져오고, 원곡으로도 연결했어요' : 'MP3에서 가사를 가져왔어요', 3000);
+  } else toast(dur != null ? '이 MP3에는 가사가 없어요. 원곡으로만 연결했어요. 가사는 아래 방법으로 넣어 주세요.' : '이 파일에는 가사가 없어요', 4500);
+});
 $('#lyPaste').onclick = async () => {
   try {
     const t = await navigator.clipboard.readText();

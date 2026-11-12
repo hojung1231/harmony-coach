@@ -43,7 +43,7 @@
         <div class="num">2</div>
         <div class="body">
           <div class="head"><b>가사</b><span class="badge must">필수</span></div>
-          <p class="small muted">곡 파일을 고르면 바로 다음 화면에서 붙여넣어요. 멜론·지니에서 복사한 그대로 넣으면 돼요.</p>
+          <p class="small muted">곡 파일을 고르면 다음 화면에서 <b>원곡 MP3를 고르면 가사가 자동으로</b> 채워져요. MP3에 가사가 없으면 멜론·지니에서 복사해 붙여넣어요.</p>
         </div>
       </div>
       <div class="need">
@@ -60,7 +60,13 @@
   <section class="screen" id="lyrics">
     <header><button class="icon" data-go="home" aria-label="뒤로">←</button><h2 id="lyTitle">가사</h2></header>
     <div class="content">
-      <p class="muted">가사는 저작권 때문에 앱에 들어 있지 않아요. 한 번만 붙여넣으면 이 폰에만 저장돼요.</p>
+      <div class="card mp3card">
+        <b>원곡 MP3에서 가져오기</b>
+        <p class="small muted">멜론·지니에서 받은 MP3에는 보통 가사가 들어 있어요. 고르면 가사를 자동으로 채우고, 그 파일을 원곡으로도 연결해요.</p>
+        <button class="primary" id="lyMp3">MP3 파일 고르기</button>
+        <input type="file" id="lyMp3File" accept="audio/mpeg,audio/*,.mp3" hidden />
+      </div>
+      <p class="small muted center">또는 직접 넣기</p>
       <div class="steps3">
         <span class="stepn">①</span><span>가사 찾아서 전체 복사</span>
         <div class="linkrow"><a class="linkbtn" id="lyMelon" target="_blank" rel="noopener">멜론에서 찾기</a><a class="linkbtn" id="lyGenie" target="_blank" rel="noopener">지니에서 찾기</a></div>

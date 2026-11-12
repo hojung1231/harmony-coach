@@ -127,3 +127,6 @@ header.clear h2 { min-width: 0; }
 .steps3 { grid-template-columns: 30px 1fr; }
 .linkrow input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; }
 .linkrow #ytConnect { flex: 0 0 auto; }
+.mp3card { display: flex; flex-direction: column; gap: 8px; }
+.mp3card b { font-size: 16px; }
+.center { text-align: center; }
