@@ -2,10 +2,11 @@
 import * as db from './db.js';
 import { MicPitch, Voice, PATCHES } from './pitch.js';
 import { readTags } from './id3.js';
-import { readSheet, buildSong, alignToAudio, lyricsFromSheet } from './autosong.js';
+import { readSheet, buildSong, alignToAudio, lyricsFromSheet, APP_PROMPT, parseSheetText, checkSheet } from './autosong.js';
 import { APP_VERSION, checkUpdate, applyUpdate } from './update.js';
 
 const $ = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const SOL = ['도', '도#', '레', '레#', '미', '파', '파#', '솔', '솔#', '라', '라#', '시'];
 const pcOf = (m) => ((Math.round(m) % 12) + 12) % 12;
@@ -159,44 +160,105 @@ $('#songFile').addEventListener('change', async (e) => {
 });
 
 /* ---------- 새 곡 추가: 원곡 MP3 + 악보 → 자동으로 곡 만들기 ---------- */
-const ADD = { mp3: null, tags: null, dur: 0, sheets: [], oct: 1, busy: false };
+const ADD = { mp3: null, tags: null, dur: 0, sheets: [], oct: 1, busy: false, parsed: null, mode: null };
+const lsGet = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
+const lsSet = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {} };
 const getKey = () => { try { return localStorage.getItem('hc-claude-key') || ''; } catch { return ''; } };
 const setKey = (k) => { try { localStorage.setItem('hc-claude-key', (k || '').trim()); } catch {} };
 function addReset() {
-  Object.assign(ADD, { mp3: null, tags: null, dur: 0, sheets: [], oct: 1, busy: false });
+  Object.assign(ADD, { mp3: null, tags: null, dur: 0, sheets: [], oct: 1, busy: false, parsed: null });
   $('#addTitle').value = ''; $('#addArtist').value = ''; $('#addKey').value = '';
+  $('#appText').value = ''; lsSet('hc-add-paste', ''); appCheck(); db.del('draft:add-mp3').catch(() => {});
   $('#addProg').hidden = true; addRefresh();
 }
+function addMode() { return ADD.mode || lsGet('hc-add-mode') || (getKey() ? 'api' : 'app'); }
+// 앱이 Claude 앱으로 넘어간 사이 폰이 화면을 정리해도 고른 MP3·붙여넣은 답이 남도록
+let draftTried = false;
+async function addRestore() {
+  if (draftTried) return; draftTried = true;
+  try {
+    const d = await db.get('draft:add-mp3');
+    if (d && d.blob && !ADD.mp3) await addSetMp3(new File([d.blob], d.name || 'song.mp3', { type: d.blob.type || 'audio/mpeg' }), d.dur, d.title, d.artist);
+  } catch {}
+  const t = lsGet('hc-add-paste');
+  if (t && !$('#appText').value) { $('#appText').value = t; appCheck(); }
+}
 function addRefresh() {
-  const t = ADD.tags || {};
+  addRestore();
+  const t = ADD.tags || {}, mode = addMode();
+  $$('#addMode button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.m === mode)));
+  $('#modeApp').hidden = mode !== 'app'; $('#modeApi').hidden = mode !== 'api';
   $('#addMp3Box').classList.toggle('done', !!ADD.mp3);
   $('#addMp3Info').innerHTML = ADD.mp3
     ? `✓ <b></b> (${fmt(ADD.dur)})<br>${t.lyrics ? '가사도 들어 있어요 ✓' : '가사가 없는 파일이에요 — 악보의 가사를 쓸게요'}`
     : '멜론·지니에서 받은 MP3면 제목·가수·가사가 자동으로 들어와요.';
   if (ADD.mp3) $('#addMp3Info b').textContent = ADD.mp3.name;
   $('#addMp3Btn').classList.toggle('ghost', !!ADD.mp3); $('#addMp3Btn').firstChild.textContent = ADD.mp3 ? '다른 MP3 고르기' : 'MP3 고르기';
-  $('#addSheetBox').classList.toggle('done', ADD.sheets.length > 0);
+  $('#addSheetBox').classList.toggle('done', mode === 'app' ? !!ADD.parsed : ADD.sheets.length > 0);
   $('#addSheetInfo').textContent = ADD.sheets.length ? '✓ ' + ADD.sheets.map((f) => f.name).join(', ') : 'PDF 파일 또는 악보 사진(여러 장 가능, 순서대로).';
   $('#addSheetBtn').classList.toggle('ghost', ADD.sheets.length > 0); $('#addSheetBtn').firstChild.textContent = ADD.sheets.length ? '다시 고르기' : '악보 고르기';
-  $('#addMeta').hidden = !ADD.mp3 && !ADD.sheets.length;
-  $('#addKeyBox').hidden = !!getKey();
+  $('#addMeta').hidden = !ADD.mp3 && !ADD.sheets.length && !ADD.parsed;
+  $('#addKeyBox').hidden = mode !== 'api' || !!getKey();
   document.querySelectorAll('#addOct button').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.o === ADD.oct)));
-  $('#addMake').disabled = ADD.busy || !ADD.mp3 || !ADD.sheets.length;
+  $('#addMake').disabled = ADD.busy || !ADD.mp3 || (mode === 'app' ? !ADD.parsed : !ADD.sheets.length);
   $('#addMake').textContent = ADD.busy ? '만드는 중…' : '🎵 곡 만들기';
 }
 document.querySelectorAll('#addOct button').forEach((b) => b.onclick = () => { ADD.oct = +b.dataset.o; addRefresh(); });
+async function addSetMp3(f, dur, title, artist) {
+  ADD.mp3 = f; ADD.dur = dur; ADD.tags = await readTags(f).catch(() => ({}));
+  const base = f.name.replace(/\.[^.]+$/, '');
+  const dash = base.indexOf('-');
+  $('#addTitle').value = title || ADD.tags.title || (dash > 0 ? base.slice(dash + 1).trim() : base);
+  $('#addArtist').value = artist || ADD.tags.artist || (dash > 0 ? base.slice(0, dash).trim() : '');
+  addRefresh();
+}
 $('#addMp3').addEventListener('change', async (e) => {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
   const dur = await new Promise((res) => { const a = new Audio(); a.preload = 'metadata'; a.onloadedmetadata = () => res(a.duration); a.onerror = () => res(null); a.src = URL.createObjectURL(f); });
   if (dur == null) return toast('재생할 수 없는 파일이에요. MP3 파일을 골라 주세요.', 3000);
-  ADD.mp3 = f; ADD.dur = dur; ADD.tags = await readTags(f).catch(() => ({}));
-  const base = f.name.replace(/\.[^.]+$/, '');
-  const dash = base.indexOf('-');
-  $('#addTitle').value = ADD.tags.title || (dash > 0 ? base.slice(dash + 1).trim() : base);
-  $('#addArtist').value = ADD.tags.artist || (dash > 0 ? base.slice(0, dash).trim() : '');
-  addRefresh();
+  draftTried = true;
+  await addSetMp3(f, dur);
+  db.put({ id: 'draft:add-mp3', blob: f, name: f.name, dur }).catch(() => {});
 });
+$$('#addMode button').forEach((b) => b.onclick = () => { ADD.mode = b.dataset.m; lsSet('hc-add-mode', ADD.mode); addRefresh(); });
+// Claude 앱 방법
+$('#appCopy').onclick = async () => {
+  const t = $('#addTitle').value.trim(), a = $('#addArtist').value.trim();
+  const text = APP_PROMPT + (t ? `\n\n곡: ${t}${a ? ' - ' + a : ''}` : '');
+  try { await navigator.clipboard.writeText(text); toast('지시문을 복사했어요. Claude 앱에 악보를 올리고 붙여넣어 보내세요.', 3500); }
+  catch {
+    $('#appText').value = text; $('#appText').select();
+    toast('자동 복사가 막혀 있어요. 아래 칸의 글을 길게 눌러 전체 복사해 주세요.', 4000);
+  }
+};
+$('#appPaste').onclick = async () => {
+  try {
+    const t = await navigator.clipboard.readText();
+    if (!t || !t.trim()) return toast('복사된 내용이 없어요. Claude 답의 코드 블록 복사 버튼을 먼저 눌러 주세요.', 3500);
+    $('#appText').value = t; appCheck(true);
+  } catch { toast('자동 붙여넣기가 막혀 있어요. 아래 칸을 길게 눌러 붙여넣어 주세요.', 3500); $('#appText').focus(); }
+};
+function appCheck(fromBtn) {
+  const el = $('#appCheck'), v = $('#appText').value;
+  el.className = 'small'; ADD.parsed = null;
+  if (!v.trim() || v.startsWith(APP_PROMPT.slice(0, 30))) { el.textContent = ''; addRefreshLite(); return; }
+  lsSet('hc-add-paste', v);
+  try {
+    const sh = parseSheetText(v), c = checkSheet(sh);
+    if (!c.notes) throw new Error('음표가 하나도 없어요');
+    ADD.parsed = sh;
+    el.className = 'small ok';
+    el.textContent = `✓ 마디 ${c.measures}개 · 음표 ${c.notes}개 · ${sh.key_tonic} ${sh.key_mode === 'minor' ? '단조' : '장조'} · ${sh.time_signature}`
+      + (c.odd ? ` — 박자가 안 맞는 마디 ${c.odd}개(그대로 써도 돼요)` : '') + (c.bad ? ` — 못 읽은 음 ${c.bad}개` : '');
+    if (sh.title && !$('#addTitle').value) $('#addTitle').value = sh.title;
+    if (sh.artist && !$('#addArtist').value) $('#addArtist').value = sh.artist;
+    if (fromBtn) toast('Claude 답을 읽었어요', 2000);
+  } catch (err) { el.className = 'small bad'; el.textContent = err.message; }
+  addRefreshLite();
+}
+function addRefreshLite() { if (!ADD.busy) { const m = addMode(); $('#addSheetBox').classList.toggle('done', m === 'app' ? !!ADD.parsed : ADD.sheets.length > 0); $('#addMeta').hidden = !ADD.mp3 && !ADD.sheets.length && !ADD.parsed; $('#addMake').disabled = !ADD.mp3 || (m === 'app' ? !ADD.parsed : !ADD.sheets.length); } }
+$('#appText').addEventListener('input', () => appCheck());
 $('#addSheet').addEventListener('change', (e) => {
   const fs = [...e.target.files]; e.target.value = '';
   if (!fs.length) return;
@@ -209,10 +271,11 @@ function addProg(title, sub, pct) {
 }
 $('#addMake').onclick = async () => {
   if (ADD.busy) return;
+  const mode = addMode();
   const typed = $('#addKey').value.trim();
-  if (typed) setKey(typed);
+  if (typed && mode === 'api') setKey(typed);
   const apiKey = getKey();
-  if (!apiKey) { $('#addKeyBox').hidden = false; $('#addKey').focus(); return toast('Claude API 키를 먼저 넣어 주세요', 2500); }
+  if (mode === 'api' && !apiKey) { $('#addKeyBox').hidden = false; $('#addKey').focus(); return toast('Claude API 키를 먼저 넣어 주세요', 2500); }
   ADD.busy = true; addRefresh();
   let wake = null; try { wake = await navigator.wakeLock.request('screen'); } catch {}
   const title = $('#addTitle').value.trim(), artist = $('#addArtist').value.trim();
@@ -220,11 +283,15 @@ $('#addMake').onclick = async () => {
   let sub = '보통 1~3분 걸려요. 화면을 켜 둔 채 기다려 주세요.', pct = 5;
   const tick = setInterval(() => { if (pct < 70) addProg('① Claude가 악보를 읽는 중…', `${sub} (${Math.round((Date.now() - t0) / 1000)}초)`, pct); }, 1000);
   try {
-    addProg('① Claude가 악보를 읽는 중…', sub, pct);
-    const sheet = await readSheet({
-      apiKey, files: ADD.sheets, title, artist,
-      onProgress: (c) => { sub = `음표 받는 중… ${Math.round(c / 100) / 10}k 글자`; pct = Math.min(69, 10 + c / 600); },
-    });
+    let sheet;
+    if (mode === 'app') { clearInterval(tick); sheet = ADD.parsed; }
+    else {
+      addProg('① Claude가 악보를 읽는 중…', sub, pct);
+      sheet = await readSheet({
+        apiKey, files: ADD.sheets, title, artist,
+        onProgress: (c) => { sub = `음표 받는 중… ${Math.round(c / 100) / 10}k 글자`; pct = Math.min(69, 10 + c / 600); },
+      });
+    }
     pct = 100; clearInterval(tick);
     const song = buildSong(sheet, { octave: ADD.oct, title, artist });
     const info = `음표 ${song.notes.length}개 · ${song.key} · ${song.time}`;

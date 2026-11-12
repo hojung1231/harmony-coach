@@ -30,7 +30,7 @@
   <section class="screen" id="add">
     <header><button class="icon" data-go="home" aria-label="뒤로">←</button><h2>새 곡 추가</h2></header>
     <div class="content">
-      <p class="muted">원곡 MP3와 악보만 올리면 앱이 알아서 곡을 만들어요.</p>
+      <p class="muted">원곡 MP3와 악보만 있으면 앱이 알아서 곡을 만들어요.</p>
       <div class="need" id="addMp3Box">
         <div class="num">1</div>
         <div class="body">
@@ -43,8 +43,18 @@
         <div class="num">2</div>
         <div class="body">
           <div class="head"><b>악보</b><span class="badge must">필수</span></div>
-          <p class="small muted" id="addSheetInfo">PDF 파일 또는 악보 사진(여러 장 가능, 순서대로).</p>
-          <label class="primary filebtn" id="addSheetBtn">악보 고르기<input type="file" id="addSheet" accept="application/pdf,.pdf,image/*" multiple hidden /></label>
+          <div class="seg" id="addMode"><button data-m="app">Claude 앱으로 (구독)</button><button data-m="api">API 키로 (자동)</button></div>
+          <div id="modeApp" class="appsteps">
+            <div class="astep"><span class="an">①</span><div><button class="primary" id="appCopy">지시문 복사</button></div></div>
+            <div class="astep"><span class="an">②</span><div><a class="btnlink" id="appOpen" href="https://claude.ai/new" target="_blank" rel="noopener">Claude 앱 열기</a><p class="small muted">새 대화에 <b>악보 PDF·사진</b>을 올리고, 입력칸을 길게 눌러 <b>지시문을 붙여넣어</b> 보내요.</p></div></div>
+            <div class="astep"><span class="an">③</span><div><p class="small muted">Claude 답의 코드 블록 <b>복사</b> 버튼을 누른 뒤 돌아와서</p><button class="primary" id="appPaste">Claude 답 붙여넣기</button></div></div>
+            <textarea id="appText" placeholder="또는 여기에 길게 눌러 붙여넣기"></textarea>
+            <p class="small" id="appCheck"></p>
+          </div>
+          <div id="modeApi">
+            <p class="small muted" id="addSheetInfo">PDF 파일 또는 악보 사진(여러 장 가능, 순서대로).</p>
+            <label class="primary filebtn" id="addSheetBtn">악보 고르기<input type="file" id="addSheet" accept="application/pdf,.pdf,image/*" multiple hidden /></label>
+          </div>
         </div>
       </div>
       <div class="card" id="addMeta" hidden>

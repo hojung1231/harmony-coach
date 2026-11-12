@@ -145,3 +145,15 @@ details.adv { margin-top: 18px; }
 details.adv summary { cursor: pointer; padding: 6px 0; }
 details.adv .filebtn { margin-top: 8px; background: transparent; color: var(--accent); border: 1px solid var(--line); }
 .song .chips .del { margin-left: auto; font-size: 12px; padding: 3px 10px; border-radius: 10px; background: transparent; color: var(--muted); border: 1px solid var(--line); }
+#addMode { align-self: stretch; }
+#addMode button { flex: 1; font-size: 13px; padding: 8px 6px; }
+.appsteps { display: flex; flex-direction: column; gap: 10px; }
+.astep { display: flex; gap: 8px; align-items: flex-start; }
+.astep > div { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.astep .an { font-size: 18px; color: var(--accent); font-weight: 800; line-height: 40px; }
+.astep button, .btnlink { width: 100%; }
+.btnlink { display: block; text-align: center; padding: 11px; border-radius: 12px; border: 1px solid var(--line); color: var(--accent); font-weight: 700; text-decoration: none; box-sizing: border-box; }
+#appText { min-height: 90px; height: 90px; font-size: 12px; font-family: ui-monospace, monospace; }
+#appCheck.ok { color: #1aa060; }
+#appCheck.bad { color: #e0566b; }
+[hidden] { display: none !important; }

@@ -347,3 +347,72 @@ export async function alignToAudio(song, blob, onStage) {
   const res = alignToFeatures(song, feat, dec.duration);
   return { ...res, duration: dec.duration };
 }
+
+/* ---------- Claude 앱(구독)으로 악보 읽기: 지시문 복사 → 답 붙여넣기 ---------- */
+export const APP_PROMPT = `첨부한 악보의 노래 멜로디를 아래 형식의 JSON 하나로 바꿔 줘. 화음 연습 앱이 이 데이터 그대로 음을 재생하니까 음높이와 박자를 정확하게 읽어 줘.
+
+규칙
+- 가사가 붙은 노래 멜로디 줄만 적어. 반주·코드 기호는 무시.
+- 모든 마디를 실제로 부르는 순서대로 펼쳐서 적어: 도돌이표, 1·2번 괄호, D.S., D.C., 세뇨, 코다를 펼치고, 반복할 때는 그 회차의 가사(2절 등)를 써.
+- 전주·간주·후주처럼 노래하지 않는 마디도 길이 그대로 쉼표로 적어 (보표에 악기 음이 작게 적혀 있어도 쉼표).
+- 못갖춘마디는 실제 길이만큼만.
+- 음높이는 악보에 적힌 그대로(옮기지 말 것), 조표와 그 마디의 임시표를 반영해서 "F#4", "Bb3", "C5" 처럼. 쉼표는 "R".
+- 길이는 16분음표 단위 숫자: 16분=1, 8분=2, 점8분=3, 4분=4, 점4분=6, 2분=8, 점2분=12, 온음표=16, 셋잇단 8분=1.333, 셋잇단 4분=2.667. 한 마디의 합은 박자표 길이와 같아야 해.
+- 붙임줄로 다음 음과 이어지면 음이름 뒤에 ~ 를 붙여 (예: "A4~").
+- 가사는 그 음에서 시작하는 음절 한 글자. 앞 음절을 끄는 음(멜리스마)과 쉼표에는 가사를 넣지 마.
+
+형식 — 설명 없이 아래 모양의 JSON 하나만 코드 블록으로 답해:
+{"title":"곡 제목","artist":"가수","key":"D major","key_signature":2,"time":"12/8","tempo":72,"beat":6,
+"measures":[
+[["R",4],["D4",2,"어"],["E4",2,"쩌"],["F#4~",4,"면"]],
+[["F#4",2],["E4",2,"처"],["D4",8,"음"]]
+],
+"memo":"불확실했던 부분을 짧게"}
+- key: 으뜸음 + major/minor. key_signature: 조표의 ♯ 개수(양수) 또는 ♭ 개수(음수).
+- tempo: 악보의 메트로놈 숫자(없으면 추정). beat: 그 숫자가 세는 음표 길이(16분 단위: 4분=4, 점4분=6, 2분=8).
+- measures: 마디 배열. 마디 = 음표 배열. 음표 = [음높이, 길이] 또는 [음높이, 길이, "가사"].
+- 마디 하나는 한 줄에 적어 줘.`;
+
+/** 붙여넣은 Claude 답 → readSheet 결과와 같은 모양. 실패하면 SheetError */
+export function parseSheetText(text) {
+  if (!text || !text.trim()) throw new SheetError('붙여넣은 내용이 없어요');
+  let t = text.replace(/```[a-zA-Z]*\s*/g, '').replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if (a < 0) throw new SheetError('Claude 답에서 곡 데이터를 찾지 못했어요. 코드 블록 전체를 복사해 주세요.');
+  if (b < a) throw new SheetError('곡 데이터가 중간에 끊겼어요. 코드 블록 전체를 다시 복사해 주세요. (답이 끊겼으면 Claude에게 "이어서"라고 해 주세요)');
+  t = t.slice(a, b + 1).replace(/,\s*([\]}])/g, '$1');
+  let o;
+  try { o = JSON.parse(t); } catch { throw new SheetError('곡 데이터가 중간에 잘렸거나 형식이 달라요. 코드 블록 전체를 다시 복사해 주세요. (답이 끊겼으면 Claude에게 "이어서"라고 해 주세요)'); }
+  if (!Array.isArray(o.measures) || !o.measures.length) throw new SheetError('마디(measures)가 없어요');
+  // 이미 API 형식이면 그대로
+  if (o.measures[0] && Array.isArray(o.measures[0].notes)) return o;
+  const km = /^\s*([A-Ga-g][#b♯♭]?)\s*(major|minor|장조|단조|maj|min|m)?/i.exec(o.key || o.key_tonic || 'C');
+  const mode = km && km[2] && /^(minor|단조|min|m)$/i.test(km[2]) ? 'minor' : 'major';
+  const measures = o.measures.map((ms, i) => ({
+    n: i + 1,
+    notes: (Array.isArray(ms) ? ms : []).filter((x) => Array.isArray(x) && x.length >= 2).map(([p, d, ly]) => {
+      const ps = String(p).trim(), tie = ps.endsWith('~');
+      const pp = ps.replace(/~$/, '').trim();
+      return { p: /^(r|rest|쉼표)$/i.test(pp) ? 'rest' : pp, d: +d || 0, tie, lyric: ly == null ? '' : String(ly).trim() };
+    }),
+  }));
+  return {
+    title: o.title || '', artist: o.artist || '',
+    key_tonic: km ? km[1][0].toUpperCase() + km[1].slice(1) : 'C', key_mode: mode,
+    key_signature: o.key_signature | 0, time_signature: o.time || o.time_signature || '4/4',
+    tempo_bpm: +o.tempo || +o.tempo_bpm || 80, tempo_beat_16ths: +o.beat || +o.tempo_beat_16ths || 4,
+    measures, notes_on_reading: o.memo || '',
+  };
+}
+/** 붙여넣은 데이터 요약·점검 (마디 길이가 박자표와 다른 마디 수 등) */
+export function checkSheet(sheet) {
+  const [a, b] = String(sheet.time_signature || '4/4').split('/').map(Number);
+  const bar = a && b ? a * 16 / b : 16;
+  let notes = 0, odd = 0, bad = 0;
+  sheet.measures.forEach((m, i) => {
+    let sum = 0;
+    for (const x of m.notes) { sum += x.d; if (x.p !== 'rest') { notes++; if (parsePitch(x.p) == null) bad++; } }
+    if (i > 0 && i < sheet.measures.length - 1 && Math.abs(sum - bar) > 0.05) odd++;
+  });
+  return { measures: sheet.measures.length, notes, odd, bad };
+}
