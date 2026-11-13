@@ -176,3 +176,11 @@ details.adv .filebtn { margin-top: 8px; background: transparent; color: var(--ac
 #recMic { align-self: stretch; }
 #recMic button { flex: 1; font-size: 14px; }
 #recMicName { font-size: 12px; }
+.recly { text-align: center; padding: 6px 4px 2px; cursor: pointer; user-select: none; }
+#recLyNow { font-size: 22px; font-weight: 800; line-height: 1.35; color: var(--muted); min-height: 30px; }
+#recLyNow .sung { color: var(--text); }
+#recLyNow .cur { color: #ffb020; text-decoration: underline; text-underline-offset: 4px; }
+#recLyNext { margin-top: 2px; font-size: 15px; min-height: 20px; }
+.recnone { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.recnone button { padding: 6px 10px; font-size: 13px; }
+#recRoll { height: 38vh; }

@@ -4,7 +4,7 @@ import { VSR, pitchTrack, segment, tuningOffset, estimateKey, meanChroma, estima
 import { pitchClassFeatures } from './autosong.js';
 
 export function initRec(D) {
-  const { $, db, show, toast, getCtx, S, save, outLat, fmt, onDone } = D;
+  const { $, db, show, toast, getCtx, S, save, outLat, fmt, onDone, cleanLyrics } = D;
   const R = {
     song: null, file: null, buf: null, dur: 0, pos: 0, mode: null, sel: -1,
     feat: null, chroma: null, tempo: null, analyzing: null, live: [], raf: 0,
@@ -16,6 +16,7 @@ export function initRec(D) {
     R.song = song; R.song.rec = R.song.rec || { notes: [] }; R.file = file || null;
     R.buf = null; R.feat = null; R.tempo = null; R.analyzing = null; R.sel = -1; R.live = []; R.pos = 0;
     $('#recTitle').textContent = song.title || '멜로디 녹음';
+    LY.st = null; loadLyrics(song).then(() => drawLyrics());
     micLabel();
     show('rec');
     info('원곡 불러오는 중…');
@@ -45,6 +46,103 @@ export function initRec(D) {
     })().catch((e) => console.warn('orig analyze', e));
     return R.analyzing;
   }
+
+  /* ---------- 녹음할 때 가사 보기 ----------
+     이미 녹음한 부분: 녹음된 음표(음절 시작) 순서대로 가사 음절을 붙여 정확히 표시
+     새로 부르는 부분: 내 목소리에서 음절이 시작될 때마다 한 칸씩 넘김 (가사를 누르면 다음 줄로) */
+  const LY = { lines: [], total: 0, cur: 0, started: false, st: null };
+  function setLyrics(text) {
+    LY.lines = []; LY.total = 0;
+    for (const raw of (text || '').split('\n')) {
+      const line = raw.trim(); if (!line) continue;
+      const toks = []; let start = LY.total;
+      for (const w of line.split(/\s+/)) {
+        if (/[가-힣]/.test(w)) { for (const ch of w) { const syl = /[가-힣]/.test(ch); toks.push({ ch, i: syl ? LY.total++ : -1 }); } }
+        else { const syl = /[A-Za-z0-9]/.test(w); toks.push({ ch: w, i: syl ? LY.total++ : -1 }); }
+        toks.push({ ch: ' ', i: -1 });
+      }
+      LY.lines.push({ toks, from: start, to: LY.total });
+    }
+    $('#recLy').hidden = !LY.total; $('#recLyNone').hidden = !!LY.total;
+  }
+  async function loadLyrics(song) {
+    let text = '';
+    try { const r = await db.get('lyrics:' + song.id); if (r && r.text) text = r.text; } catch {}
+    if (!text && song.rawLyrics) text = cleanLyrics ? cleanLyrics(song.rawLyrics, song, false) : song.rawLyrics;
+    setLyrics(text);
+  }
+  const onBefore = (t) => R.song.rec.notes.filter((n) => n.on && n.t < t).length;   // t 전에 시작한 음절 수
+  function lyricIndex() {
+    if (R.mode === 'rec') return Math.max(0, Math.min(LY.total, LY.cur));
+    // 녹음한 음표를 기준으로: 지금 위치에서 부르고 있는(또는 다음에 부를) 음절
+    const ns = R.song.rec.notes; let k = 0;
+    for (const n of ns) { if (!n.on) continue; if (n.t <= R.pos + 0.05) k++; else break; }
+    const cur = ns.find((n) => n.t <= R.pos && R.pos < n.t + n.d);
+    return Math.max(0, Math.min(LY.total, cur ? k - 1 : k));
+  }
+  function drawLyrics() {
+    if (!LY.total) return;
+    const k = lyricIndex();
+    let li = LY.lines.findIndex((l) => k < l.to); if (li < 0) li = LY.lines.length - 1;
+    const now = LY.lines[li], next = LY.lines[li + 1];
+    const key = li + ':' + k;
+    if (LY.st === key) return; LY.st = key;
+    const el = $('#recLyNow'); el.innerHTML = '';
+    for (const tk of now.toks) {
+      const sp = document.createElement('span'); sp.textContent = tk.ch;
+      if (tk.i >= 0) sp.className = tk.i < k ? 'sung' : tk.i === k ? 'cur' : '';
+      el.appendChild(sp);
+    }
+    $('#recLyNext').textContent = next ? next.toks.map((t) => t.ch).join('').trim() : '';
+  }
+  // 실시간 음절 시작 감지 (소리가 끊겼다 다시 나거나, 음이 확 바뀌면 새 음절)
+  const ON = { unv: 99, hist: [], dev: 0, last: -1, lv: [] };
+  function liveOnset(t, m, level) {
+    ON.lv.push(level || 0); if (ON.lv.length > 20) ON.lv.shift();
+    if (m == null) {
+      ON.unv++; ON.dev = 0;
+      // 줄 끝에서 숨 쉬는 쉼(0.5초 이상)인데 가사가 그 줄 뒷부분이면 다음 줄로
+      if (ON.unv === 30 && LY.total && LY.started) {
+        const li = LY.lines.findIndex((l) => LY.cur < l.to), L = LY.lines[li];
+        if (L && LY.lines[li + 1] && LY.cur - L.from >= (L.to - L.from) * 0.7) { LY.cur = LY.lines[li + 1].from; LY.started = false; }
+        // 너무 빨리 다음 줄로 넘어가 있었으면(줄 앞 3음절 이내) 그 줄 처음으로 되돌림
+        else if (L && LY.cur - L.from <= 3 && LY.cur > L.from) { LY.cur = L.from; LY.started = false; }
+      }
+      return;
+    }
+    let onset = false;
+    // 소리가 잠깐 줄었다가(자음) 다시 커짐 → 같은 음이어도 새 음절
+    if (ON.lv.length >= 14) {
+      const L = ON.lv, n = L.length, now = L[n - 1];
+      const dipMin = Math.min(...L.slice(n - 6, n - 1)), before = Math.max(...L.slice(0, n - 6));
+      if (dipMin < before * 0.45 && now > before * 0.7) { onset = true; ON.lv = [now]; }
+    }
+    if (ON.unv >= 3) onset = true;
+    else if (ON.hist.length >= 4) {
+      const s2 = ON.hist.slice(-6).sort((a, b) => a - b), ref = s2[s2.length >> 1];
+      if (Math.abs(m - ref) > 0.8) { if (++ON.dev >= 3) { onset = true; ON.dev = 0; } } else ON.dev = 0;
+    }
+    ON.unv = 0;
+    if (onset) { ON.hist = []; if (t - ON.last > 0.09 && t >= recFrom - 0.05) { ON.last = t; if (LY.started) LY.cur++; else LY.started = true; } }
+    ON.hist.push(m); if (ON.hist.length > 12) ON.hist.shift();
+  }
+  $('#recLy').onclick = () => {      // 가사가 늦으면 눌러서 다음 줄로
+    if (!LY.total) return;
+    const k = lyricIndex(), li = LY.lines.findIndex((l) => k < l.to);
+    if (li < 0 || !LY.lines[li + 1]) return;
+    if (R.mode === 'rec') { LY.cur = LY.lines[li + 1].from; LY.started = false; }
+    else { const ns = R.song.rec.notes.filter((n) => n.on); const tgt = ns[LY.lines[li + 1].from]; if (tgt) { R.pos = Math.max(0, tgt.t - 0.3); refresh(); draw(); } }
+    LY.st = null; drawLyrics();
+  };
+  $('#recLyPaste').onclick = async () => {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (!t || !t.trim()) return toast('복사된 가사가 없어요. 멜론·지니에서 가사를 먼저 복사해 주세요.', 3000);
+      R.song.rawLyrics = t;
+      if (R.song.notes) await db.put({ id: 'lyrics:' + R.song.id, text: cleanLyrics ? cleanLyrics(t, R.song, false) : t });
+      await loadLyrics(R.song); LY.st = null; drawLyrics(); toast('가사를 넣었어요', 2000);
+    } catch { toast('붙여넣기가 막혀 있어요. 연습 화면의 가사 버튼으로 넣어 주세요.', 3500); }
+  };
 
   /* ---------- 마이크 고르기: 폰 마이크 / 블루투스 이어폰 마이크 ---------- */
   function micLabel() {
@@ -108,6 +206,7 @@ export function initRec(D) {
     } catch { mic = null; return toast('마이크를 허용해 주세요. 설정 → 앱 → 화음 코치 → 권한 → 마이크', 4500); }
     R.mode = 'rec'; R.sel = -1; R.live = [];
     recFrom = R.pos;
+    LY.cur = onBefore(recFrom); LY.started = false; LY.st = null; Object.assign(ON, { unv: 99, hist: [], dev: 0, last: -1 });
     const from = Math.max(0, recFrom - 3);          // 3초 앞부터 들려줌 (준비)
     chunks = []; acc = 0; accN = 0; step = ctx.sampleRate / VSR; firstT = null;
     lagEst = outLat();
@@ -202,6 +301,7 @@ export function initRec(D) {
       if (R.mode === 'rec' && mic) {
         const m = mic.read(), tt = t - lagEst;
         R.live.push([tt, m == null ? null : m]);
+        liveOnset(tt, m, mic.level);
         if (R.live.length > 2000) R.live.splice(0, 500);
       }
       if (R.mode === 'listen' && mv) {
@@ -210,7 +310,7 @@ export function initRec(D) {
         mv.set(cur >= 0 ? ns[cur].m : null, 0.5, cur);
       }
       $('#recTime').textContent = `${fmt(R.pos)} / ${fmt(R.dur)}`; $('#recSeek').value = R.pos;
-      draw();
+      draw(); drawLyrics();
       R.raf = requestAnimationFrame(tick);
     };
     R.raf = requestAnimationFrame(tick);
@@ -229,6 +329,7 @@ export function initRec(D) {
   }
   function draw() {
     if (!R.song) return;
+    if (!R.mode) drawLyrics();
     const { dpr, w, h, lo, hi, X, Y, px } = geom();
     const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const css = getComputedStyle(document.body);

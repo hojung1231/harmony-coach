@@ -104,7 +104,7 @@ function cleanLyrics(text, song, trim = true) {
     if (/^(작사|작곡|편곡|노래|가수|가사|lyrics|앨범|발매)/i.test(raw.trim()) || /(작사|작곡|편곡)\s*[:：]/.test(raw)) return false;
     return true;
   });
-  const need = song.notes.filter((x) => x[3]).length, cnt = (ls) => countSyl(ls.join('\n'));
+  const need = (song.notes || []).filter((x) => x[3]).length, cnt = (ls) => countSyl(ls.join('\n'));
   if (trim) {
     while (lines.length > 1 && cnt(lines) > need && cnt(lines.slice(1)) >= need) lines.shift();
     while (lines.length > 1 && cnt(lines) > need && cnt(lines.slice(0, -1)) >= need) lines.pop();
@@ -341,7 +341,7 @@ $('#addMake').onclick = async () => {
 
 /* ---------- 버전 2: 멜로디 녹음 화면 ---------- */
 REC = initRec({
-  $, db, show, toast, getCtx: () => getCtx(), S, save, outLat: () => outLat(), fmt,
+  $, db, show, toast, getCtx: () => getCtx(), S, save, outLat: () => outLat(), fmt, cleanLyrics,
   onDone: async (song) => {
     if (song.rawLyrics && !(await db.get('lyrics:' + song.id))) {
       const text = cleanLyrics(song.rawLyrics, song, false);   // 내 녹음은 음 개수가 가사 음절과 딱 맞지 않을 수 있어 줄을 덜어내지 않음
