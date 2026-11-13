@@ -172,3 +172,7 @@ details.adv .filebtn { margin-top: 8px; background: transparent; color: var(--ac
 @keyframes recblink { 50% { opacity: .6; } }
 #recRec:disabled, #recPlay:disabled, #recDone:disabled, #recMidi:disabled { opacity: .4; }
 .rectime { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.recmic { display: flex; flex-direction: column; gap: 4px; }
+#recMic { align-self: stretch; }
+#recMic button { flex: 1; font-size: 14px; }
+#recMicName { font-size: 12px; }

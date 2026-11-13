@@ -341,7 +341,7 @@ $('#addMake').onclick = async () => {
 
 /* ---------- 버전 2: 멜로디 녹음 화면 ---------- */
 REC = initRec({
-  $, db, show, toast, getCtx: () => getCtx(), S, outLat: () => outLat(), fmt,
+  $, db, show, toast, getCtx: () => getCtx(), S, save, outLat: () => outLat(), fmt,
   onDone: async (song) => {
     if (song.rawLyrics && !(await db.get('lyrics:' + song.id))) {
       const text = cleanLyrics(song.rawLyrics, song, false);   // 내 녹음은 음 개수가 가사 음절과 딱 맞지 않을 수 있어 줄을 덜어내지 않음

@@ -188,6 +188,7 @@
     <header><button class="icon" data-go="home" aria-label="뒤로">←</button><h2 id="recTitle">멜로디 녹음</h2><button class="icon sm" id="recMidi" aria-label="MIDI 파일로 저장">MIDI</button></header>
     <div class="content recbody">
       <p class="small muted" id="recInfo"></p>
+      <div class="recmic"><div class="seg" id="recMic"><button data-mic="phone">📱 폰 마이크</button><button data-mic="ear">🎧 이어폰 마이크</button></div><span class="small muted" id="recMicName"></span></div>
       <canvas id="recRoll"></canvas>
       <div id="recEdit" class="recedit" hidden><span class="small muted">고른 음</span><button id="recUp">▲ 반음</button><button id="recDown">▼ 반음</button><button id="recDel">삭제</button><button id="recDesel" aria-label="선택 해제">✕</button></div>
       <div class="rectime"><span class="small muted">화면을 좌우로 끌어 위치 이동 · 음표를 누르면 고치기</span><b id="recTime" class="small"></b></div>
@@ -213,7 +214,7 @@
         <span class="small muted">보통 = 반음의 절반(50센트)까지 초록색</span>
       </div>
       <label class="chk"><input type="checkbox" id="setOct" />옥타브 달라도 인정</label>
-      <label class="chk"><input type="checkbox" id="setPhoneMic" />블루투스 이어폰일 때 폰 마이크 쓰기</label>
+      <label class="chk"><input type="checkbox" id="setPhoneMic" />블루투스 이어폰일 때 폰 마이크 쓰기 (끄면 이어폰 마이크)</label>
       <p class="small muted">켜면: 블루투스 이어폰(샥즈 등)은 듣기만 하고 노래는 폰 마이크로 들어요. 이어폰 마이크를 쓰면 폰이 통화 모드로 바뀌어 원곡이 작고 탁하게 들려요.</p>
       <label class="chk"><input type="checkbox" id="setAec" />스피커 소리 걸러내기</label>
       <p class="small muted">켜면: 시작 카운트 때 스피커 소리 크기를 재고, 앱이 내는 음(화음음·멜로디음·원곡 노래)과 같은 음이면서 그 크기 정도인 소리는 판정에서 빼요. 음 시작을 또렷하게 내면 그 음이 끝날 때까지(긴 음도) 계속 인식해요. 시작 카운트 때는 조용히 해 주세요. 이어폰을 끼면 꺼도 돼요.</p>

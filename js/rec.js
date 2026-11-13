@@ -4,7 +4,7 @@ import { VSR, pitchTrack, segment, tuningOffset, estimateKey, meanChroma, estima
 import { pitchClassFeatures } from './autosong.js';
 
 export function initRec(D) {
-  const { $, db, show, toast, getCtx, S, outLat, fmt, onDone } = D;
+  const { $, db, show, toast, getCtx, S, save, outLat, fmt, onDone } = D;
   const R = {
     song: null, file: null, buf: null, dur: 0, pos: 0, mode: null, sel: -1,
     feat: null, chroma: null, tempo: null, analyzing: null, live: [], raf: 0,
@@ -16,6 +16,7 @@ export function initRec(D) {
     R.song = song; R.song.rec = R.song.rec || { notes: [] }; R.file = file || null;
     R.buf = null; R.feat = null; R.tempo = null; R.analyzing = null; R.sel = -1; R.live = []; R.pos = 0;
     $('#recTitle').textContent = song.title || '멜로디 녹음';
+    micLabel();
     show('rec');
     info('원곡 불러오는 중…');
     try {
@@ -44,6 +45,22 @@ export function initRec(D) {
     })().catch((e) => console.warn('orig analyze', e));
     return R.analyzing;
   }
+
+  /* ---------- 마이크 고르기: 폰 마이크 / 블루투스 이어폰 마이크 ---------- */
+  function micLabel() {
+    const ph = S.phoneMic !== false;
+    document.querySelectorAll('#recMic button').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.mic === 'phone') === ph)));
+    $('#recMicName').textContent = mic && mic.micName ? `사용 중: ${mic.micName}` : ph ? '노래는 폰 마이크로 받아요' : '노래는 이어폰 마이크로 받아요';
+  }
+  document.querySelectorAll('#recMic button').forEach((b) => b.onclick = () => {
+    if (R.mode) return toast('녹음·듣기를 멈춘 뒤 바꿔 주세요');
+    const ph = b.dataset.mic === 'phone';
+    if ((S.phoneMic !== false) === ph) return;
+    S.phoneMic = ph; save();
+    if (mic) { mic.stop(); mic = null; }
+    micLabel();
+    toast(ph ? '폰 마이크로 바꿨어요' : '이어폰 마이크로 바꿨어요. 폰이 통화 모드가 되어 원곡이 작고 탁하게 들릴 수 있어요.', 3500);
+  });
 
   /* ---------- 상태 표시 ---------- */
   function info(t) { $('#recInfo').textContent = t; }
@@ -83,7 +100,11 @@ export function initRec(D) {
     if (!R.buf) return;
     const ctx = getCtx();
     try {
-      if (!mic) { mic = new MicPitch(); await mic.start(ctx, { aec: false, phoneMic: S.phoneMic !== false }); }
+      if (!mic) {
+        mic = new MicPitch(); await mic.start(ctx, { aec: false, phoneMic: S.phoneMic !== false });
+        if (mic.micKind === 'ear' && !mic.micFound) toast('이어폰 마이크를 찾지 못해 기본 마이크로 녹음해요. 이어폰이 연결됐는지 확인해 주세요.', 4000);
+        micLabel();
+      }
     } catch { mic = null; return toast('마이크를 허용해 주세요. 설정 → 앱 → 화음 코치 → 권한 → 마이크', 4500); }
     R.mode = 'rec'; R.sel = -1; R.live = [];
     recFrom = R.pos;
@@ -132,8 +153,11 @@ export function initRec(D) {
     // 지연 보정: 충분히 긴 녹음에서 한 번 찾아 두고(같은 폰·이어폰이면 그대로), 짧게 다시 부를 땐 그 값을 씀
     //  (일부러/실수로 틀리게 부른 짧은 구간은 원곡과 안 맞아 지연을 잘못 찾을 수 있음)
     const rec0 = R.song.rec;
-    let dt = rec0.dt != null ? rec0.dt : 0;
-    if (R.feat && (segs.length >= 25 || rec0.dt == null)) { dt = refineLag(segs, R.feat); if (segs.length >= 25) rec0.dt = dt; }
+    const kind = S.phoneMic !== false ? 'phone' : 'ear';      // 마이크마다 지연이 달라 따로 기억
+    rec0.dtBy = rec0.dtBy || {};
+    const known = rec0.dtBy[kind];
+    let dt = known != null ? known : 0;
+    if (R.feat && (segs.length >= 25 || known == null)) { dt = refineLag(segs, R.feat); if (segs.length >= 25) rec0.dtBy[kind] = dt; }
     segs.forEach((n) => { n.t += dt; });
     // 그 구간만 바꿔 끼우기
     const rec = R.song.rec;

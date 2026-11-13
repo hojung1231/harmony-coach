@@ -1,5 +1,5 @@
 // 앱 업데이트 확인 / 적용
-export const APP_VERSION = '3.0.0';
+export const APP_VERSION = '3.0.1';
 
 const ASSETS = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/pitch.js', 'js/db.js', 'js/id3.js', 'js/autosong.js', 'js/voice.js', 'js/rec.js', 'js/vendor/anthropic.mjs', 'js/update.js',
   'songs/sooknyeo.json', 'manifest.webmanifest', 'sw.js'];
