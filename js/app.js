@@ -4,6 +4,7 @@ import { MicPitch, Voice, PATCHES } from './pitch.js';
 import { readTags } from './id3.js';
 import { readSheet, buildSong, alignToAudio, lyricsFromSheet, APP_PROMPT, parseSheetText, checkSheet } from './autosong.js';
 import { APP_VERSION, checkUpdate, applyUpdate } from './update.js';
+import { initRec } from './rec.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
@@ -29,9 +30,11 @@ function toast(msg, ms = 2200) {
 /* ---------- 화면 전환 ---------- */
 let raf = 0;
 let skipPop = false;
+let REC = null;   // 버전 2 녹음 화면 (아래에서 만듦)
 function show(id, fromPop) {
   cancelAnimationFrame(raf);
   if (id !== 'play') stopPlay();
+  if (id !== 'rec' && REC) REC.leave();
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
   if (id === 'home') renderHome();
   if (id === 'add') addRefresh();
@@ -90,7 +93,7 @@ function attachLyrics(song, text) {
 }
 function countSyl(text) { return text.split('\n').reduce((a, l) => a + lineWords(l).flat().length, 0); }
 /** 복사할 때 딸려 온 제목·가수·작사/작곡 줄 빼기, 그래도 음절이 많으면 앞뒤 줄을 맞을 때까지 덜어냄 */
-function cleanLyrics(text, song) {
+function cleanLyrics(text, song, trim = true) {
   const norm = (s) => s.replace(/\s+/g, '').toLowerCase();
   const title = norm(song.title || ''), artist = norm(song.artist || '');
   let lines = text.split('\n').filter((raw) => {
@@ -102,8 +105,10 @@ function cleanLyrics(text, song) {
     return true;
   });
   const need = song.notes.filter((x) => x[3]).length, cnt = (ls) => countSyl(ls.join('\n'));
-  while (lines.length > 1 && cnt(lines) > need && cnt(lines.slice(1)) >= need) lines.shift();
-  while (lines.length > 1 && cnt(lines) > need && cnt(lines.slice(0, -1)) >= need) lines.pop();
+  if (trim) {
+    while (lines.length > 1 && cnt(lines) > need && cnt(lines.slice(1)) >= need) lines.shift();
+    while (lines.length > 1 && cnt(lines) > need && cnt(lines.slice(0, -1)) >= need) lines.pop();
+  }
   return lines.join('\n').trim();
 }
 
@@ -171,7 +176,7 @@ function addReset() {
   $('#appText').value = ''; lsSet('hc-add-paste', ''); appCheck(); db.del('draft:add-mp3').catch(() => {});
   $('#addProg').hidden = true; addRefresh();
 }
-function addMode() { return ADD.mode || lsGet('hc-add-mode') || (getKey() ? 'api' : 'app'); }
+function addMode() { return ADD.mode || lsGet('hc-add-mode') || 'voice'; }
 // 앱이 Claude 앱으로 넘어간 사이 폰이 화면을 정리해도 고른 MP3·붙여넣은 답이 남도록
 let draftTried = false;
 async function addRestore() {
@@ -187,21 +192,23 @@ function addRefresh() {
   addRestore();
   const t = ADD.tags || {}, mode = addMode();
   $$('#addMode button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.m === mode)));
-  $('#modeApp').hidden = mode !== 'app'; $('#modeApi').hidden = mode !== 'api';
+  $('#modeApp').hidden = mode !== 'app'; $('#modeApi').hidden = mode !== 'api'; $('#modeVoice').hidden = mode !== 'voice';
+  $('#addStep2T').textContent = mode === 'voice' ? '멜로디' : '악보';
   $('#addMp3Box').classList.toggle('done', !!ADD.mp3);
   $('#addMp3Info').innerHTML = ADD.mp3
     ? `✓ <b></b> (${fmt(ADD.dur)})<br>${t.lyrics ? '가사도 들어 있어요 ✓' : '가사가 없는 파일이에요 — 악보의 가사를 쓸게요'}`
     : '멜론·지니에서 받은 MP3면 제목·가수·가사가 자동으로 들어와요.';
   if (ADD.mp3) $('#addMp3Info b').textContent = ADD.mp3.name;
   $('#addMp3Btn').classList.toggle('ghost', !!ADD.mp3); $('#addMp3Btn').firstChild.textContent = ADD.mp3 ? '다른 MP3 고르기' : 'MP3 고르기';
-  $('#addSheetBox').classList.toggle('done', mode === 'app' ? !!ADD.parsed : ADD.sheets.length > 0);
+  $('#addSheetBox').classList.toggle('done', mode === 'voice' ? !!ADD.mp3 : mode === 'app' ? !!ADD.parsed : ADD.sheets.length > 0);
   $('#addSheetInfo').textContent = ADD.sheets.length ? '✓ ' + ADD.sheets.map((f) => f.name).join(', ') : 'PDF 파일 또는 악보 사진(여러 장 가능, 순서대로).';
   $('#addSheetBtn').classList.toggle('ghost', ADD.sheets.length > 0); $('#addSheetBtn').firstChild.textContent = ADD.sheets.length ? '다시 고르기' : '악보 고르기';
   $('#addMeta').hidden = !ADD.mp3 && !ADD.sheets.length && !ADD.parsed;
   $('#addKeyBox').hidden = mode !== 'api' || !!getKey();
   document.querySelectorAll('#addOct button').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.o === ADD.oct)));
-  $('#addMake').disabled = ADD.busy || !ADD.mp3 || (mode === 'app' ? !ADD.parsed : !ADD.sheets.length);
-  $('#addMake').textContent = ADD.busy ? '만드는 중…' : '🎵 곡 만들기';
+  $('#addMake').disabled = ADD.busy || !ADD.mp3 || (mode === 'voice' ? false : mode === 'app' ? !ADD.parsed : !ADD.sheets.length);
+  $('#addMake').textContent = ADD.busy ? '만드는 중…' : mode === 'voice' ? '🎤 멜로디 녹음하러 가기' : '🎵 곡 만들기';
+  $('#addOctField').hidden = mode === 'voice';
 }
 document.querySelectorAll('#addOct button').forEach((b) => b.onclick = () => { ADD.oct = +b.dataset.o; addRefresh(); });
 async function addSetMp3(f, dur, title, artist) {
@@ -257,7 +264,7 @@ function appCheck(fromBtn) {
   } catch (err) { el.className = 'small bad'; el.textContent = err.message; }
   addRefreshLite();
 }
-function addRefreshLite() { if (!ADD.busy) { const m = addMode(); $('#addSheetBox').classList.toggle('done', m === 'app' ? !!ADD.parsed : ADD.sheets.length > 0); $('#addMeta').hidden = !ADD.mp3 && !ADD.sheets.length && !ADD.parsed; $('#addMake').disabled = !ADD.mp3 || (m === 'app' ? !ADD.parsed : !ADD.sheets.length); } }
+function addRefreshLite() { if (!ADD.busy) addRefresh(); }
 $('#appText').addEventListener('input', () => appCheck());
 $('#addSheet').addEventListener('change', (e) => {
   const fs = [...e.target.files]; e.target.value = '';
@@ -272,6 +279,16 @@ function addProg(title, sub, pct) {
 $('#addMake').onclick = async () => {
   if (ADD.busy) return;
   const mode = addMode();
+  if (mode === 'voice') {
+    if (!ADD.mp3) return;
+    const t = ADD.tags || {};
+    const base = { id: `song-${Date.now()}`, title: $('#addTitle').value.trim() || ADD.mp3.name.replace(/\.[^.]+$/, ''), artist: $('#addArtist').value.trim(),
+      source: 'voice', rawLyrics: t.lyrics || '', rec: { notes: [] } };
+    const file = ADD.mp3;
+    addReset();
+    REC.openRec(base, file);
+    return;
+  }
   const typed = $('#addKey').value.trim();
   if (typed && mode === 'api') setKey(typed);
   const apiKey = getKey();
@@ -321,6 +338,20 @@ $('#addMake').onclick = async () => {
     addProg('만들지 못했어요', (err && err.message) || String(err), 0);
   } finally { clearInterval(tick); try { wake && wake.release(); } catch {} }
 };
+
+/* ---------- 버전 2: 멜로디 녹음 화면 ---------- */
+REC = initRec({
+  $, db, show, toast, getCtx: () => getCtx(), S, outLat: () => outLat(), fmt,
+  onDone: async (song) => {
+    if (song.rawLyrics && !(await db.get('lyrics:' + song.id))) {
+      const text = cleanLyrics(song.rawLyrics, song, false);   // 내 녹음은 음 개수가 가사 음절과 딱 맞지 않을 수 있어 줄을 덜어내지 않음
+      if (text) await db.put({ id: 'lyrics:' + song.id, text });
+    }
+    S.orig = true; S.speed = 1; save();
+    openSong(song);
+  },
+});
+$('#plRec').onclick = () => { if (current && current.source === 'voice') { const s = current; stopPlay(); REC.openRec(s); } };
 
 /* ---------- 가사 넣기 ---------- */
 let current = null, lyr = null;
@@ -535,6 +566,7 @@ function startPlay(text) {
   P.t = 0; P.playing = false; P.hit = 0; P.tot = 0; P.hist = []; P.trace = []; setState('none');
   applyView();
   $('#plTitle').textContent = current.title;
+  $('#plRec').hidden = current.source !== 'voice';
   $('#plPlay').textContent = '▶';
   syncButtons();
   show('play');

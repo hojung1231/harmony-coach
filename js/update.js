@@ -1,7 +1,7 @@
 // 앱 업데이트 확인 / 적용
-export const APP_VERSION = '2.11.1';
+export const APP_VERSION = '3.0.0';
 
-const ASSETS = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/pitch.js', 'js/db.js', 'js/id3.js', 'js/autosong.js', 'js/vendor/anthropic.mjs', 'js/update.js',
+const ASSETS = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/pitch.js', 'js/db.js', 'js/id3.js', 'js/autosong.js', 'js/voice.js', 'js/rec.js', 'js/vendor/anthropic.mjs', 'js/update.js',
   'songs/sooknyeo.json', 'manifest.webmanifest', 'sw.js'];
 
 const newer = (a, b) => {

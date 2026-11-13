@@ -157,3 +157,18 @@ details.adv .filebtn { margin-top: 8px; background: transparent; color: var(--ac
 #appCheck.ok { color: #1aa060; }
 #appCheck.bad { color: #e0566b; }
 [hidden] { display: none !important; }
+/* 버전 2: 멜로디 녹음 */
+#addMode button { font-size: 12.5px; padding: 8px 4px; }
+#modeVoice p { margin: 0 0 6px; }
+.recbody { display: flex; flex-direction: column; gap: 10px; }
+#recRoll { width: 100%; height: 46vh; min-height: 240px; border-radius: 14px; border: 1px solid var(--line); touch-action: none; display: block; }
+.recedit { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.recedit button { padding: 8px 12px; font-size: 14px; }
+.recbtns { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.recbtns .round { width: 58px; height: 58px; font-size: 13px; line-height: 1.15; padding: 0; }
+.recbtns .round.big { width: 82px; height: 82px; font-size: 16px; font-weight: 800; }
+.recbtns .round.rec { background: #e0405a; border-color: #e0405a; color: #fff; }
+.recbtns .round.rec.on { background: #fff; color: #e0405a; animation: recblink 1s infinite; }
+@keyframes recblink { 50% { opacity: .6; } }
+#recRec:disabled, #recPlay:disabled, #recDone:disabled, #recMidi:disabled { opacity: .4; }
+.rectime { display: flex; justify-content: space-between; align-items: center; gap: 8px; }

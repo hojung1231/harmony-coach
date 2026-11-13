@@ -30,11 +30,11 @@
   <section class="screen" id="add">
     <header><button class="icon" data-go="home" aria-label="뒤로">←</button><h2>새 곡 추가</h2></header>
     <div class="content">
-      <p class="muted">원곡 MP3와 악보만 있으면 앱이 알아서 곡을 만들어요.</p>
+      <p class="muted">원곡(또는 MR) MP3를 고르고, 멜로디는 내 목소리로 불러서 만들어요.</p>
       <div class="need" id="addMp3Box">
         <div class="num">1</div>
         <div class="body">
-          <div class="head"><b>원곡 MP3</b><span class="badge must">필수</span></div>
+          <div class="head"><b>원곡 · MR MP3</b><span class="badge must">필수</span></div>
           <p class="small muted" id="addMp3Info">멜론·지니에서 받은 MP3면 제목·가수·가사가 자동으로 들어와요.</p>
           <label class="primary filebtn" id="addMp3Btn">MP3 고르기<input type="file" id="addMp3" accept="audio/mpeg,audio/*,.mp3" hidden /></label>
         </div>
@@ -42,8 +42,12 @@
       <div class="need" id="addSheetBox">
         <div class="num">2</div>
         <div class="body">
-          <div class="head"><b>악보</b><span class="badge must">필수</span></div>
-          <div class="seg" id="addMode"><button data-m="app">Claude 앱으로 (구독)</button><button data-m="api">API 키로 (자동)</button></div>
+          <div class="head"><b id="addStep2T">멜로디</b><span class="badge must">필수</span></div>
+          <div class="seg" id="addMode"><button data-m="voice">🎤 내 목소리로</button><button data-m="app">악보 · Claude 앱</button><button data-m="api">악보 · API</button></div>
+          <div id="modeVoice" class="small muted">
+            <p>MP3(원곡이나 MR)를 틀어 놓고 <b>내가 멜로디를 부르면</b>, 앱이 내 목소리를 음높이·박자로 바꿔 <b>멜로디 악보(미디)</b>를 만들어요. 그 멜로디로 3도 위·아래 화음을 연습해요.</p>
+            <p>🎧 <b>이어폰 필수</b> — 스피커로 틀면 원곡 소리가 같이 녹음돼요. 한 번에 다 안 불러도 돼요. 틀린 부분만 다시 부를 수 있어요.</p>
+          </div>
           <div id="modeApp" class="appsteps">
             <div class="astep"><span class="an">①</span><div><button class="primary" id="appCopy">지시문 복사</button></div></div>
             <div class="astep"><span class="an">②</span><div><a class="btnlink" id="appOpen" href="https://claude.ai/new" target="_blank" rel="noopener">Claude 앱 열기</a><p class="small muted">새 대화에 <b>악보 PDF·사진</b>을 올리고, 입력칸을 길게 눌러 <b>지시문을 붙여넣어</b> 보내요.</p></div></div>
@@ -60,7 +64,7 @@
       <div class="card" id="addMeta" hidden>
         <label class="field">제목<input id="addTitle" /></label>
         <label class="field">가수<input id="addArtist" /></label>
-        <div class="field">부르는 음높이
+        <div class="field" id="addOctField">부르는 음높이
           <div class="seg" id="addOct"><button data-o="1">남자 (악보보다 한 옥타브 아래)</button><button data-o="0">여자 (악보 그대로)</button></div>
         </div>
       </div>
@@ -103,7 +107,7 @@
   <!-- 연습 -->
   <section class="screen" id="play">
     <div id="fb" class="fb"></div>
-    <header class="clear"><button class="icon" id="plBack" aria-label="뒤로">←</button><h2 id="plTitle"></h2><button class="icon sm" id="plPatch" aria-label="가이드음 음색 고르기">음색</button><button class="icon sm" id="plView" aria-label="그래프 모드로 바꾸기">그래프</button><button class="icon sm" id="plLyrics" aria-label="가사 고치기">가사</button></header>
+    <header class="clear"><button class="icon" id="plBack" aria-label="뒤로">←</button><h2 id="plTitle"></h2><button class="icon sm" id="plPatch" aria-label="가이드음 음색 고르기">음색</button><button class="icon sm" id="plView" aria-label="그래프 모드로 바꾸기">그래프</button><button class="icon sm" id="plLyrics" aria-label="가사 고치기">가사</button><button class="icon sm" id="plRec" aria-label="멜로디 다시 녹음" hidden>멜로디</button></header>
     <div id="patchPanel" class="sheet" hidden>
       <div class="sheethead"><b>화음 가이드음 음색</b><button class="icon" id="patchClose" aria-label="닫기">✕</button></div>
       <p class="small muted">재생 중에 눌러서 원곡·내 목소리 사이에서 어떤 소리가 잘 들리는지 바로 비교해 보세요.</p>
@@ -179,6 +183,26 @@
   </section>
 
   <!-- 설정 -->
+  <!-- 버전 2: 멜로디 녹음 -->
+  <section class="screen" id="rec">
+    <header><button class="icon" data-go="home" aria-label="뒤로">←</button><h2 id="recTitle">멜로디 녹음</h2><button class="icon sm" id="recMidi" aria-label="MIDI 파일로 저장">MIDI</button></header>
+    <div class="content recbody">
+      <p class="small muted" id="recInfo"></p>
+      <canvas id="recRoll"></canvas>
+      <div id="recEdit" class="recedit" hidden><span class="small muted">고른 음</span><button id="recUp">▲ 반음</button><button id="recDown">▼ 반음</button><button id="recDel">삭제</button><button id="recDesel" aria-label="선택 해제">✕</button></div>
+      <div class="rectime"><span class="small muted">화면을 좌우로 끌어 위치 이동 · 음표를 누르면 고치기</span><b id="recTime" class="small"></b></div>
+      <input type="range" id="recSeek" min="0" max="1" step="0.1" value="0" />
+      <div class="recbtns">
+        <button class="round" id="recStart" aria-label="처음으로">처음</button>
+        <button class="round" id="recBack5" aria-label="5초 뒤로">◀<br>5초</button>
+        <button class="round big rec" id="recRec">● 녹음</button>
+        <button class="round" id="recFwd5" aria-label="5초 앞으로">▶<br>5초</button>
+        <button class="round" id="recPlay">▶ 듣기</button>
+      </div>
+      <button class="primary big" id="recDone" disabled>✓ 완료 — 화음 연습하기</button>
+    </div>
+  </section>
+
   <section class="screen" id="settings">
     <header><button class="icon" data-go="home" aria-label="뒤로">←</button><h2>설정</h2></header>
     <div class="content">
