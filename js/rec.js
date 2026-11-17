@@ -167,13 +167,21 @@ export function initRec(D) {
   });
 
   /* ---------- 상태 표시 ---------- */
+  const svg = (d) => `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">${d}</svg>`;
+  const ICON = {
+    rec: svg('<circle cx="12" cy="12" r="7" fill="currentColor"/>'),
+    stop: svg('<rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/>'),
+    play: svg('<path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/>'),
+  };
   function info(t) { $('#recInfo').textContent = t || ''; $('#recInfo').hidden = !t; }   // 처리 중일 때만 잠깐 표시
   function refresh() {
     const n = R.song.rec.notes;
     info('');
-    $('#recRec').textContent = R.mode === 'rec' ? '■ 정지' : '● 녹음';
-    $('#recRec').classList.toggle('on', R.mode === 'rec');
-    $('#recPlay').textContent = R.mode === 'listen' ? '■ 정지' : '▶ 듣기';
+    const recOn = R.mode === 'rec', lisOn = R.mode === 'listen';
+    $('#recRec').innerHTML = recOn ? ICON.stop : ICON.rec; $('#recRec').setAttribute('aria-label', recOn ? '녹음 정지' : '녹음');
+    $('#recRec').classList.toggle('on', recOn);
+    $('#recPlay').innerHTML = lisOn ? ICON.stop : ICON.play; $('#recPlay').setAttribute('aria-label', lisOn ? '듣기 정지' : '원곡과 내 멜로디 듣기');
+    $('#recPlay').classList.toggle('on', lisOn);
     $('#recPlay').disabled = R.mode === 'rec' || !n.length;
     $('#recDone').disabled = R.mode != null || !n.length;
     $('#recMidi').disabled = R.mode != null || !n.length;
