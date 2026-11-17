@@ -167,12 +167,10 @@ export function initRec(D) {
   });
 
   /* ---------- 상태 표시 ---------- */
-  function info(t) { $('#recInfo').textContent = t; }
+  function info(t) { $('#recInfo').textContent = t || ''; $('#recInfo').hidden = !t; }   // 처리 중일 때만 잠깐 표시
   function refresh() {
     const n = R.song.rec.notes;
-    const k = R.song.rec.key, names = ['도', '도#', '레', '레#', '미', '파', '파#', '솔', '솔#', '라', '라#', '시'];
-    if (R.mode !== 'rec') info(n.length ? `음표 ${n.length}개${k ? ` · ${names[k.tonic]} ${k.mode === 'minor' ? '단조' : '장조'}` : ''} — 틀린 곳은 그 위치로 옮겨 다시 녹음하면 그 부분만 바뀌어요`
-      : '이어폰을 끼고 ● 녹음을 누른 뒤, 원곡을 들으며 멜로디를 불러 주세요 (가사나 "라라라")');
+    info('');
     $('#recRec').textContent = R.mode === 'rec' ? '■ 정지' : '● 녹음';
     $('#recRec').classList.toggle('on', R.mode === 'rec');
     $('#recPlay').textContent = R.mode === 'listen' ? '■ 정지' : '▶ 듣기';
@@ -254,7 +252,7 @@ export function initRec(D) {
     let segs = segment(tr).map((n) => ({ ...n, t: n.t + t0 }));
     const recTo = Math.min(stopAt, R.dur);
     segs = segs.filter((n) => n.t >= recFrom - 0.15 && n.t < recTo);
-    if (!segs.length) { info('목소리가 잡히지 않았어요. 이어폰을 끼고 폰 마이크 가까이에서 불러 주세요.'); return; }
+    if (!segs.length) { info(''); toast('목소리가 잡히지 않았어요. 폰 마이크 가까이에서 불러 주세요.', 3500); return; }
     const tun = tuningOffset(segs);
     segs.forEach((n) => { n.m = Math.round(n.m - tun); });
     await analyzeOrig();
