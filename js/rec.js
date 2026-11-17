@@ -16,7 +16,7 @@ export function initRec(D) {
     R.song = song; R.song.rec = R.song.rec || { notes: [] }; R.file = file || null;
     R.buf = null; R.feat = null; R.tempo = null; R.analyzing = null; R.sel = -1; R.live = []; R.pos = 0;
     $('#recTitle').textContent = song.title || '멜로디 녹음';
-    LY.st = null; loadLyrics(song).then(() => drawLyrics());
+    LY.st = null; LY.hold = null; loadLyrics(song).then(() => drawLyrics());
     micLabel();
     show('rec');
     info('원곡 불러오는 중…');
@@ -72,8 +72,11 @@ export function initRec(D) {
     setLyrics(text);
   }
   const onBefore = (t) => R.song.rec.notes.filter((n) => n.on && n.t < t).length;   // t 전에 시작한 음절 수
+  // 정지한 곳: 위치를 옮기기 전까지 부르던 가사 자리를 그대로 보여 줌
+  const held = () => !R.mode && LY.hold && Math.abs(R.pos - LY.hold.pos) < 0.3;
   function lyricIndex() {
     if (R.mode === 'rec') return Math.max(0, Math.min(LY.total, LY.cur));
+    if (held()) return Math.max(0, Math.min(LY.total, LY.hold.cur));
     // 녹음한 음표를 기준으로: 지금 위치에서 부르고 있는(또는 다음에 부를) 음절
     const ns = R.song.rec.notes; let k = 0;
     for (const n of ns) { if (!n.on) continue; if (n.t <= R.pos + 0.05) k++; else break; }
@@ -85,8 +88,11 @@ export function initRec(D) {
     const k = lyricIndex();
     let li = LY.lines.findIndex((l) => k < l.to); if (li < 0) li = LY.lines.length - 1;
     const now = LY.lines[li], next = LY.lines[li + 1];
-    const key = li + ':' + k;
+    const hd = held();
+    const key = li + ':' + k + ':' + hd;
     if (LY.st === key) return; LY.st = key;
+    $('#recLy').classList.toggle('held', hd);
+    $('#recLyHold').hidden = !hd;
     const el = $('#recLyNow'); el.innerHTML = '';
     for (const tk of now.toks) {
       const sp = document.createElement('span'); sp.textContent = tk.ch;
@@ -206,7 +212,8 @@ export function initRec(D) {
     } catch { mic = null; return toast('마이크를 허용해 주세요. 설정 → 앱 → 화음 코치 → 권한 → 마이크', 4500); }
     R.mode = 'rec'; R.sel = -1; R.live = [];
     recFrom = R.pos;
-    LY.cur = onBefore(recFrom); LY.started = false; LY.st = null; Object.assign(ON, { unv: 99, hist: [], dev: 0, last: -1 });
+    const h = LY.hold && Math.abs(recFrom - LY.hold.pos) < 0.3 ? LY.hold : null;
+    LY.cur = h ? Math.min(LY.total, h.cur + (h.started ? 1 : 0)) : onBefore(recFrom); LY.started = false; LY.st = null; LY.hold = null; Object.assign(ON, { unv: 99, hist: [], dev: 0, last: -1 });
     const from = Math.max(0, recFrom - 3);          // 3초 앞부터 들려줌 (준비)
     chunks = []; acc = 0; accN = 0; step = ctx.sampleRate / VSR; firstT = null;
     lagEst = outLat();
@@ -230,6 +237,8 @@ export function initRec(D) {
   async function stopRec() {
     const ctx = getCtx();
     const stopAt = origNow();
+    LY.hold = { pos: Math.min(stopAt, R.dur), cur: LY.cur, started: LY.started };
+    R.pos = LY.hold.pos;
     stopOrig();
     if (sp) { sp.onaudioprocess = null; try { mic.src.disconnect(sp); } catch {} sp.disconnect(); sink.disconnect(); sp = null; }
     R.mode = null; refresh();
