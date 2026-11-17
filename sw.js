@@ -1,5 +1,5 @@
 // 오프라인 캐시 (네트워크 우선, 실패 시 캐시)
-const CACHE = 'harmony-coach-3.0.5';
+const CACHE = 'harmony-coach-3.0.6';
 const ASSETS = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/pitch.js', 'js/db.js', 'js/id3.js', 'js/autosong.js', 'js/voice.js', 'js/rec.js', 'js/vendor/anthropic.mjs', 'js/update.js',
   'songs/sooknyeo.json', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS))); self.skipWaiting(); });
@@ -27,7 +27,9 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   if (e.request.method !== 'GET' || u.origin !== location.origin || u.pathname.endsWith('version.json')) return;
-  e.respondWith(fetch(e.request).then((r) => {
+  // 폰에 남은 옛 파일 대신 항상 서버에 새로 확인 (바뀐 게 없으면 빠르게 그대로 씀)
+  const fresh = e.request.mode === 'navigate' ? fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }) : fetch(e.request, { cache: 'no-cache' });
+  e.respondWith(fresh.then((r) => {
     const copy = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return r;
   }).catch(() => caches.match(e.request, { ignoreSearch: true })));
 });

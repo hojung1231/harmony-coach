@@ -17,10 +17,6 @@
   <section class="screen active" id="home">
     <header><h1>🎤 화음 코치</h1><button class="icon" data-go="settings" aria-label="설정">⚙️</button></header>
     <div class="content">
-      <div id="updateBanner" class="banner hidden">
-        <span>새 버전 <b id="updateVer"></b></span>
-        <button class="primary" id="updateNow">업데이트</button>
-      </div>
       <div id="songList" class="list"></div>
       <button class="add" data-go="add">＋ 새 곡 추가</button>
     </div>
@@ -238,6 +234,7 @@
 
   <input type="file" id="origFile" accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg,.flac" hidden />
   <div id="volPop" class="volpop" hidden><span id="volPopLabel"></span><div class="track"><div id="volPopFill"></div></div><b id="volPopNum"></b></div>
+  <div id="updateBanner" class="updbar hidden"><span>새 버전 <b id="updateVer"></b> 이 나왔어요</span><button class="primary" id="updateNow">업데이트</button></div>
   <div id="toast" class="toast"></div>
   <script type="module" src="js/app.js"></script>
 </body>

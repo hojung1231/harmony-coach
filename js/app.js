@@ -1162,7 +1162,15 @@ $('#updateCheck').onclick = async (e) => {
   } catch (err) { toast('확인 실패: ' + err.message); }
   btn.disabled = false; btn.textContent = '업데이트 확인';
 };
-checkUpdate().then((v) => { if (v) { $('#updateVer').textContent = v; $('#updateBanner').classList.remove('hidden'); } }).catch(() => {});
+// 새 버전 확인: 앱을 켤 때 + 다시 볼 때(다른 앱 갔다 오기·화면 켜기) + 30분마다. 알림은 어느 화면에서든 아래에 떠요
+let lastCheck = 0;
+function autoCheck() {
+  if (Date.now() - lastCheck < 60000) return; lastCheck = Date.now();
+  checkUpdate().then((v) => { if (v) { $('#updateVer').textContent = v; $('#updateBanner').classList.remove('hidden'); } }).catch(() => {});
+}
+autoCheck();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) autoCheck(); });
+setInterval(autoCheck, 30 * 60000);
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 renderHome();
